@@ -95,3 +95,6 @@ temp/
 apify_storage/
 storage/
 *_results.json
+data/samples/*.json
+data/sp500/
+outputs/apify_inputs/
