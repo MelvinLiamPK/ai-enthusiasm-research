@@ -269,6 +269,7 @@ def _call_apify(client, profile_urls, max_posts):
     run_input = {
         "usernames": profile_urls,
         "maxPosts": max_posts,
+        "limit": max_posts,  # actor defaults to 100 if not set
     }
     try:
         run = client.actor(APIFY_ACTOR).call(run_input=run_input)
