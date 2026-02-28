@@ -269,7 +269,6 @@ def _call_apify(client, profile_urls, max_posts):
     run_input = {
         "usernames": profile_urls,
         "maxPosts": max_posts,
-        "limit": max_posts,  # actor defaults to 100 if not set
     }
     try:
         run = client.actor(APIFY_ACTOR).call(run_input=run_input)
@@ -297,6 +296,8 @@ def _scrape_batches(client, urls, max_posts, batch_size,
     all_results = []
     total = len(urls)
     n_batches = (total + batch_size - 1) // batch_size
+    consecutive_failures = 0
+    MAX_CONSECUTIVE_FAILURES = 3
 
     print(f"\n{'=' * 70}")
     print(f"SCRAPING {total:,} PROFILES IN {n_batches} BATCHES")
@@ -310,9 +311,15 @@ def _scrape_batches(client, urls, max_posts, batch_size,
         items = _call_apify(client, batch_urls, max_posts)
         if items:
             all_results.extend(items)
+            consecutive_failures = 0
             print(f"      Running total: {len(all_results):,} items")
         else:
-            print(f"      ⚠  Batch failed — continuing")
+            consecutive_failures += 1
+            print(f"      ⚠  Batch failed ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES} consecutive)")
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                print(f"\n  ✗ {MAX_CONSECUTIVE_FAILURES} consecutive failures — aborting.")
+                print(f"    Fix the issue and use --resume to continue.")
+                break
 
         if checkpoint_cb:
             checkpoint_cb(all_results, i + len(batch_urls))
