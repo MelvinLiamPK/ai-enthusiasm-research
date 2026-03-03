@@ -268,8 +268,7 @@ def _call_apify(client, profile_urls, max_posts):
     """Run the Apify actor for one batch. Returns list of items or None."""
     run_input = {
         "usernames": profile_urls,
-        "maxPosts": max_posts,
-        "total_posts": max_posts,  # enables automatic pagination beyond 100
+        "total_posts": max_posts,  # enables automatic pagination (max 10000)
     }
     try:
         run = client.actor(APIFY_ACTOR).call(run_input=run_input)
