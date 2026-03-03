@@ -319,7 +319,7 @@ def _scrape_batches(client, urls, max_posts, batch_size,
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print(f"\n  ✗ {MAX_CONSECUTIVE_FAILURES} consecutive failures — aborting.")
                 print(f"    Fix the issue and use --resume to continue.")
-                break
+                return all_results, False  # aborted
 
         if checkpoint_cb:
             checkpoint_cb(all_results, i + len(batch_urls))
@@ -328,7 +328,7 @@ def _scrape_batches(client, urls, max_posts, batch_size,
             print(f"      Waiting {DELAY_BETWEEN_BATCHES}s …")
             time.sleep(DELAY_BETWEEN_BATCHES)
 
-    return all_results
+    return all_results, True  # completed
 
 
 # ===========================================================================
@@ -613,7 +613,7 @@ def run_scraping(client, df, url_col, output_dir, max_posts, batch_size,
     def checkpoint_cb(results, done):
         _save_checkpoint(results, start_from + done, output_dir)
 
-    new_results = _scrape_batches(client, remaining, max_posts, batch_size,
+    new_results, completed = _scrape_batches(client, remaining, max_posts, batch_size,
                                   checkpoint_cb)
 
     all_results = previous_results + new_results
@@ -625,11 +625,17 @@ def run_scraping(client, df, url_col, output_dir, max_posts, batch_size,
 
     info = _save_results(all_results, output_dir, df, url_col,
                          submitted_urls=urls)
-    _clear_checkpoint(output_dir)
+
+    if completed:
+        _clear_checkpoint(output_dir)
 
     # Summary
     print(f"\n{'=' * 70}")
-    print("✅ SCRAPING COMPLETE")
+    if completed:
+        print("✅ SCRAPING COMPLETE")
+    else:
+        print("⚠️  SCRAPING ABORTED (partial results saved)")
+        print(f"    Run with --resume to continue from where we left off.")
     print("=" * 70)
     print(f"  Profiles scraped: {info['profiles_count']:,}")
     print(f"  Posts collected:  {info['posts_count']:,}")
