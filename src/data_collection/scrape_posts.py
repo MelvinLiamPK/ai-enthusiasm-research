@@ -80,7 +80,7 @@ except ImportError:
 # ===========================================================================
 
 APIFY_ACTOR = "apimaestro/linkedin-batch-profile-posts-scraper"
-DEFAULT_MAX_POSTS = 1000
+DEFAULT_MAX_POSTS = 10000
 DEFAULT_BATCH_SIZE = 100   # profiles per Apify run
 DELAY_BETWEEN_BATCHES = 10  # seconds
 
@@ -269,6 +269,7 @@ def _call_apify(client, profile_urls, max_posts):
     run_input = {
         "usernames": profile_urls,
         "maxPosts": max_posts,
+        "total_posts": max_posts,  # enables automatic pagination beyond 100
     }
     try:
         run = client.actor(APIFY_ACTOR).call(run_input=run_input)
