@@ -31,6 +31,7 @@ Output files (saved to --output directory):
     no_posts_profiles_YYYYMMDD_HHMMSS.csv - profiles that returned zero posts
     posts_raw_YYYYMMDD_HHMMSS.json       - raw Apify response
     .scrape_checkpoint.json              - resumable state (auto-cleaned)
+    temp_results.jsonl                   - incremental raw data (auto-cleaned)
 
 Usage:
     python3 scrape_posts.py --input urls.csv --stats               # Preview
@@ -291,13 +292,17 @@ def _call_apify(client, profile_urls, max_posts):
 
 
 def _scrape_batches(client, urls, max_posts, batch_size,
-                    checkpoint_cb=None):
-    """Scrape *urls* in mini-batches with checkpointing."""
-    all_results = []
+                    temp_file, output_dir, start_from_global,
+                    items_so_far=0):
+    """Scrape *urls* in mini-batches, appending results to a JSONL temp file.
+
+    Returns (total_items, completed).  No results are kept in RAM.
+    """
     total = len(urls)
     n_batches = (total + batch_size - 1) // batch_size
     consecutive_failures = 0
     MAX_CONSECUTIVE_FAILURES = 3
+    items_count = items_so_far
 
     print(f"\n{'=' * 70}")
     print(f"SCRAPING {total:,} PROFILES IN {n_batches} BATCHES")
@@ -310,25 +315,31 @@ def _scrape_batches(client, urls, max_posts, batch_size,
 
         items = _call_apify(client, batch_urls, max_posts)
         if items:
-            all_results.extend(items)
+            # Append to JSONL file immediately — no RAM accumulation
+            with open(temp_file, "a", encoding="utf-8") as f:
+                for item in items:
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            items_count += len(items)
             consecutive_failures = 0
-            print(f"      Running total: {len(all_results):,} items")
+            print(f"      Running total: {items_count:,} items")
         else:
             consecutive_failures += 1
             print(f"      ⚠  Batch failed ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES} consecutive)")
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print(f"\n  ✗ {MAX_CONSECUTIVE_FAILURES} consecutive failures — aborting.")
                 print(f"    Fix the issue and use --resume to continue.")
-                return all_results, False  # aborted
+                profiles_done = start_from_global + i + len(batch_urls)
+                _save_checkpoint(profiles_done, items_count, temp_file, output_dir)
+                return items_count, False  # aborted
 
-        if checkpoint_cb:
-            checkpoint_cb(all_results, i + len(batch_urls))
+        profiles_done = start_from_global + i + len(batch_urls)
+        _save_checkpoint(profiles_done, items_count, temp_file, output_dir)
 
         if i + batch_size < total:
             print(f"      Waiting {DELAY_BETWEEN_BATCHES}s …")
             time.sleep(DELAY_BETWEEN_BATCHES)
 
-    return all_results, True  # completed
+    return items_count, True  # completed
 
 
 # ===========================================================================
@@ -528,27 +539,28 @@ def _checkpoint_path(output_dir):
     return Path(output_dir) / ".scrape_checkpoint.json"
 
 
-def _save_checkpoint(results, profiles_done, output_dir):
-    """Persist current progress to disk."""
+def _temp_results_path(output_dir):
+    return Path(output_dir) / "temp_results.jsonl"
+
+
+def _save_checkpoint(profiles_done, items_count, temp_file, output_dir):
+    """Persist progress metadata to disk.  Results are already on disk (JSONL)."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    temp_file = output_dir / "temp_results.json"
-    with open(temp_file, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False)
 
     cp_file = _checkpoint_path(output_dir)
     with open(cp_file, "w") as f:
         json.dump({
             "profiles_processed": profiles_done,
+            "items_count": items_count,
             "results_file": str(temp_file),
             "timestamp": datetime.now().isoformat(),
         }, f, indent=2)
-    print(f"      💾 Checkpoint: {profiles_done} profiles done")
+    print(f"      💾 Checkpoint: {profiles_done} profiles done, {items_count:,} items")
 
 
 def _load_checkpoint(output_dir):
-    """Load previous checkpoint if it exists."""
+    """Load previous checkpoint metadata (does NOT load results into RAM)."""
     cp_file = _checkpoint_path(output_dir)
     if not cp_file.exists():
         return None
@@ -556,19 +568,19 @@ def _load_checkpoint(output_dir):
     with open(cp_file) as f:
         cp = json.load(f)
 
+    # Verify the temp file exists
     temp_file = cp.get("results_file")
-    if temp_file and Path(temp_file).exists():
-        with open(temp_file) as f:
-            cp["previous_results"] = json.load(f)
-    else:
-        cp["previous_results"] = []
+    if not temp_file or not Path(temp_file).exists():
+        print(f"  ⚠ Checkpoint found but temp file missing: {temp_file}")
+        return None
 
     return cp
 
 
 def _clear_checkpoint(output_dir):
-    """Remove checkpoint files after successful completion."""
-    for name in [".scrape_checkpoint.json", "temp_results.json"]:
+    """Remove checkpoint + temp files after successful completion."""
+    for name in [".scrape_checkpoint.json", "temp_results.jsonl",
+                 "temp_results.json"]:  # also clean legacy format
         p = Path(output_dir) / name
         if p.exists():
             p.unlink()
@@ -592,42 +604,33 @@ def run_scraping(client, df, url_col, output_dir, max_posts, batch_size,
         unique_urls = _get_unique_urls(df, url_col)
 
     urls = unique_urls
+    temp_file = _temp_results_path(output_dir)
 
     # Resume handling
     start_from = 0
-    previous_results = []
+    items_so_far = 0
     if resume:
         cp = _load_checkpoint(output_dir)
         if cp:
             start_from = cp.get("profiles_processed", 0)
-            previous_results = cp.get("previous_results", [])
-            print(f"\n  ✓ Resuming from checkpoint: {start_from} profiles already done")
+            items_so_far = cp.get("items_count", 0)
+            print(f"\n  ✓ Resuming from checkpoint: {start_from} profiles already done, {items_so_far:,} items on disk")
 
     if start_from >= len(urls):
         print("\n  ✓ All profiles already scraped!")
         return
 
+    # Ensure temp file exists (don't truncate if resuming)
+    if not resume or not temp_file.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
+        temp_file.touch()
+
     # Scrape
     remaining = urls[start_from:]
 
-    def checkpoint_cb(results, done):
-        _save_checkpoint(results, start_from + done, output_dir)
-
-    new_results, completed = _scrape_batches(client, remaining, max_posts, batch_size,
-                                  checkpoint_cb)
-
-    all_results = previous_results + new_results
-
-    # Save final output
-    print(f"\n{'=' * 70}")
-    print("SAVING FINAL RESULTS")
-    print("=" * 70)
-
-    info = _save_results(all_results, output_dir, df, url_col,
-                         submitted_urls=urls)
-
-    if completed:
-        _clear_checkpoint(output_dir)
+    total_items, completed = _scrape_batches(
+        client, remaining, max_posts, batch_size,
+        temp_file, output_dir, start_from, items_so_far)
 
     # Summary
     print(f"\n{'=' * 70}")
@@ -637,17 +640,48 @@ def run_scraping(client, df, url_col, output_dir, max_posts, batch_size,
         print("⚠️  SCRAPING ABORTED (partial results saved)")
         print(f"    Run with --resume to continue from where we left off.")
     print("=" * 70)
-    print(f"  Profiles scraped: {info['profiles_count']:,}")
-    print(f"  Posts collected:  {info['posts_count']:,}")
-    if info.get("no_posts_count"):
-        print(f"  No-post profiles: {info['no_posts_count']:,}")
-    if info["posts_path"]:
-        print(f"  Posts CSV:        {info['posts_path']}")
-    if info["profiles_path"]:
-        print(f"  Profiles CSV:     {info['profiles_path']}")
-    if info.get("no_posts_path"):
-        print(f"  No-posts CSV:     {info['no_posts_path']}")
-    print(f"  Raw JSON:         {info['raw_path']}")
+    print(f"  Items on disk:  {total_items:,}")
+    print(f"  Temp JSONL:     {temp_file}")
+
+    # For small runs (prototype), convert inline
+    if total_items < 50_000:
+        print(f"\n{'=' * 70}")
+        print("CONVERTING TO CSV")
+        print("=" * 70)
+
+        # Load JSONL into memory (safe for small data)
+        raw_data = []
+        with open(temp_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    raw_data.append(json.loads(line))
+
+        info = _save_results(raw_data, output_dir, df, url_col,
+                             submitted_urls=urls)
+
+        if completed:
+            _clear_checkpoint(output_dir)
+
+        print(f"\n  Profiles scraped: {info['profiles_count']:,}")
+        print(f"  Posts collected:  {info['posts_count']:,}")
+        if info.get("no_posts_count"):
+            print(f"  No-post profiles: {info['no_posts_count']:,}")
+        if info["posts_path"]:
+            print(f"  Posts CSV:        {info['posts_path']}")
+        if info["profiles_path"]:
+            print(f"  Profiles CSV:     {info['profiles_path']}")
+        if info.get("no_posts_path"):
+            print(f"  No-posts CSV:     {info['no_posts_path']}")
+        print(f"  Raw JSON:         {info['raw_path']}")
+    else:
+        print(f"\n  ℹ️  Dataset too large for inline CSV conversion.")
+        print(f"    Run the conversion separately with more memory:")
+        print(f"    python3 src/data_processing/convert_temp_results.py")
+        if completed:
+            print(f"\n    After conversion completes, you can delete:")
+            print(f"      {temp_file}")
+            print(f"      {_checkpoint_path(output_dir)}")
 
 
 # ===========================================================================
@@ -662,11 +696,11 @@ def generate_slurm_script(args, output_dir):
 
     slurm = f"""#!/bin/bash
 #SBATCH --job-name=linkedin-scrape-posts
-#SBATCH --partition=normal
+#SBATCH --partition=nbloom
 #SBATCH --time=48:00:00
-#SBATCH --mem=8G
+#SBATCH --mem=16G
 #SBATCH --cpus-per-task=1
-#SBATCH --output={output_dir}/slurm_%j.log
+#SBATCH --output=logs/scrape_posts_%j.log
 
 # LinkedIn Post Scraper — SLURM job
 # Generated: {datetime.now().isoformat()}
