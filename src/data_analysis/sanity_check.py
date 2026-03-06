@@ -1,13 +1,31 @@
 """Sanity check on batch 2 scraped data."""
 import pandas as pd
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
+
+csv_path = PROJECT_ROOT / "data/processed/all_people_linkedin_urls/scraped_posts_batch2/posts_20260304_221328.csv"
 
 print("=" * 60)
 print("BATCH 2 POSTS CSV")
 print("=" * 60)
-df = pd.read_csv(
-    "data/processed/all_people_linkedin_urls/scraped_posts_batch2/posts_20260304_221328.csv",
-    low_memory=False, on_bad_lines="skip")
+print(f"File: {csv_path}")
+print(f"Size: {csv_path.stat().st_size / 1e9:.2f} GB")
+print()
+
+# Try python engine which handles malformed rows better
+try:
+    df = pd.read_csv(csv_path, low_memory=False, engine="python", on_bad_lines="skip")
+    print(f"Loaded with python engine (on_bad_lines=skip)")
+except Exception as e:
+    print(f"Python engine also failed: {e}")
+    print("Trying with c engine and error_bad_lines=False...")
+    df = pd.read_csv(csv_path, low_memory=False, on_bad_lines="skip",
+                     engine="c", lineterminator="\n")
+
 print(f"Rows: {len(df):,}")
+print(f"Columns: {len(df.columns)}")
 print(f"Unique profiles: {df['profile_url'].nunique():,}")
 print(f"Unique posts: {df['post_url'].nunique():,}")
 print(f"Date range: {df['post_date'].min()} -> {df['post_date'].max()}")
@@ -27,9 +45,10 @@ print()
 print("Null counts (critical fields):")
 for col in ["profile_url", "post_text", "post_url", "post_date",
             "likes", "company_name", "person_name", "ticker"]:
-    n = df[col].isna().sum()
-    pct = n / len(df) * 100
-    print(f"  {col}: {n:,} ({pct:.1f}%)")
+    if col in df.columns:
+        n = df[col].isna().sum()
+        pct = n / len(df) * 100
+        print(f"  {col}: {n:,} ({pct:.1f}%)")
 print()
 
 # Empty rows (all NaN)
