@@ -59,6 +59,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+from collections import Counter
 
 # ---------------------------------------------------------------------------
 # Dependency checks
@@ -303,6 +304,7 @@ def _scrape_batches(client, urls, max_posts, batch_size,
     consecutive_failures = 0
     MAX_CONSECUTIVE_FAILURES = 3
     items_count = items_so_far
+    seen_over_1000 = False  # once True, the 1000-cap check is disabled
 
     print(f"\n{'=' * 70}")
     print(f"SCRAPING {total:,} PROFILES IN {n_batches} BATCHES")
@@ -315,6 +317,45 @@ def _scrape_batches(client, urls, max_posts, batch_size,
 
         items = _call_apify(client, batch_urls, max_posts)
         if items:
+            # --- 1000-post cap detection ---
+            # Count posts per profile in this batch
+            profile_counts = Counter()
+            for item in items:
+                p = item.get("profile_input", "")
+                if p:
+                    profile_counts[p] += 1
+
+            # Check if any profile exceeded 1000 (proves pagination works)
+            if any(c > 1000 for c in profile_counts.values()):
+                seen_over_1000 = True
+
+            # If any profile has exactly 1000 and we haven't seen >1000 yet,
+            # this likely means pagination silently failed
+            if not seen_over_1000:
+                capped_profiles = [p for p, c in profile_counts.items() if c == 1000]
+                if capped_profiles:
+                    # Save what we have first
+                    with open(temp_file, "a", encoding="utf-8") as f:
+                        for item in items:
+                            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+                    items_count += len(items)
+
+                    profiles_done = start_from_global + i + len(batch_urls)
+                    _save_checkpoint(profiles_done, items_count, temp_file, output_dir)
+
+                    print(f"\n  🚨 PAGINATION CHECK FAILED — SCRAPING PAUSED")
+                    print(f"     {len(capped_profiles)} profile(s) returned exactly 1000 posts,")
+                    print(f"     but no profile has exceeded 1000 in this run.")
+                    print(f"     This likely means the 'total_posts' parameter is not working.")
+                    print(f"     Capped profiles:")
+                    for p in capped_profiles[:5]:
+                        print(f"       {p}  ({profile_counts[p]} posts)")
+                    if len(capped_profiles) > 5:
+                        print(f"       ... and {len(capped_profiles) - 5} more")
+                    print(f"\n     Results saved. Investigate before resuming with --resume.")
+                    return items_count, False  # aborted
+            # --- end cap detection ---
+
             # Append to JSONL file immediately — no RAM accumulation
             with open(temp_file, "a", encoding="utf-8") as f:
                 for item in items:
