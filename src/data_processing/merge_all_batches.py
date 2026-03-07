@@ -27,6 +27,8 @@ Check results:
     ls -lh data/processed/all_people_linkedin_urls/scraped_posts_combined/
 """
 
+import json
+import sys
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -37,17 +39,21 @@ from datetime import datetime
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
+# Add src/data_collection for parsing functions
+sys.path.insert(0, str(PROJECT_ROOT / "src" / "data_collection"))
+from scrape_posts import _build_url_metadata, _parse_results, _normalise_url
+
 DATA_DIR = PROJECT_ROOT / "data" / "processed" / "all_people_linkedin_urls"
 BATCH2_DIR = DATA_DIR / "scraped_posts_batch2"
 BATCH3_DIR = DATA_DIR / "scraped_posts_batch3"
 OUTPUT_DIR = DATA_DIR / "scraped_posts_combined"
 INPUT_CSV = DATA_DIR / "all_linkedin_urls.csv"
 
-# Auto-detect files
+# Batch 2: CSV (already converted)
 BATCH2_POSTS = BATCH2_DIR / "posts_20260304_221328.csv"
-BATCH2_PROFILES = BATCH2_DIR / "profiles_20260304_221328.csv"
-BATCH3_POSTS = BATCH3_DIR / "posts_20260307_110447.csv"
-BATCH3_PROFILES = BATCH3_DIR / "profiles_20260307_110447.csv"
+
+# Batch 3: read from JSONL (CSV was truncated due to disk full)
+BATCH3_JSONL = BATCH3_DIR / "temp_results.jsonl"
 
 norm = lambda u: str(u).split("?")[0].rstrip("/")
 
@@ -76,9 +82,28 @@ def main():
                       on_bad_lines="skip", low_memory=False)
     log(f"  Rows: {len(b2):,}  Unique profiles: {b2['profile_url'].nunique():,}")
 
-    log("Loading batch 3 posts...")
-    b3 = pd.read_csv(BATCH3_POSTS, engine="c", lineterminator="\n",
-                      on_bad_lines="skip", low_memory=False)
+    log("Loading batch 3 from JSONL (parsing with metadata)...")
+    # Load input CSV for metadata join
+    all_df = pd.read_csv(INPUT_CSV)
+    all_df = all_df[all_df["verified"] == True]
+    url_metadata = _build_url_metadata(all_df, "linkedin_url")
+
+    # Load JSONL
+    raw_data = []
+    with open(BATCH3_JSONL, "r", encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            line = line.strip()
+            if line:
+                raw_data.append(json.loads(line))
+            if (i + 1) % 500_000 == 0:
+                log(f"    ... loaded {i + 1:,} items")
+    log(f"  Loaded {len(raw_data):,} items from JSONL")
+
+    # Parse into posts + profiles
+    b3_posts_list, _ = _parse_results(raw_data, url_metadata)
+    del raw_data  # free memory
+    b3 = pd.DataFrame(b3_posts_list)
+    del b3_posts_list
     log(f"  Rows: {len(b3):,}  Unique profiles: {b3['profile_url'].nunique():,}")
 
     # ======================================================================
@@ -186,9 +211,7 @@ def main():
     # ======================================================================
     log("\nChecking for no-posts and missing profiles...")
 
-    # Load all verified URLs
-    all_df = pd.read_csv(INPUT_CSV)
-    all_df = all_df[all_df["verified"] == True]
+    # Load all verified URLs (already loaded earlier for batch 3 parsing)
     all_df["_norm"] = all_df["linkedin_url"].apply(norm)
     all_unique_urls = set(all_df["_norm"].unique())
     log(f"  Total verified unique URLs: {len(all_unique_urls):,}")
@@ -197,22 +220,8 @@ def main():
     combined_profiles = set(combined["profile_url"].dropna().apply(norm))
     log(f"  Profiles with posts: {len(combined_profiles):,}")
 
-    # Profiles submitted but with no posts
-    # Load batch 2 + 3 profile lists to know who was attempted
-    b2_prof = pd.read_csv(BATCH2_PROFILES)
-    b3_prof = pd.read_csv(BATCH3_PROFILES)
-    all_attempted = set(b2_prof["profile_url"].apply(norm)) | set(b3_prof["profile_url"].apply(norm))
-    del b2_prof, b3_prof
-
-    # Also count profiles from batches that returned posts
-    # Attempted = all 42,527 (28,600 + 14,041, with overlap)
-    # But some batches failed, so attempted < 42,527
-    # For now, approximate: profiles with posts + profiles known to have been attempted
-
-    # No posts = attempted but not in combined_profiles
-    # Since batch 2 attempted 28,600 and batch 3 attempted 14,041 (with 114 overlap)
-    # total attempted unique ≈ 42,527
-
+    # No posts = verified URLs not in combined dataset
+    # This includes genuinely zero-post profiles AND failed batch profiles
     no_posts_norms = all_unique_urls - combined_profiles
     no_posts_rows = all_df[all_df["_norm"].isin(no_posts_norms)].drop(columns="_norm")
     no_posts_unique = len(no_posts_norms)
