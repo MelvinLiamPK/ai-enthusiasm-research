@@ -70,7 +70,7 @@ def main():
     log("MERGING SCRAPED BATCHES")
     log("=" * 70)
     log(f"  Batch 2: {BATCH2_POSTS}")
-    log(f"  Batch 3: {BATCH3_POSTS}")
+    log(f"  Batch 3: {BATCH3_JSONL}")
     log(f"  Output:  {OUTPUT_DIR}")
     log("")
 
