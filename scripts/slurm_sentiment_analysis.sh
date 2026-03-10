@@ -1,17 +1,17 @@
 #!/bin/bash
-#SBATCH --job-name=quality_checks
+#SBATCH --job-name=sentiment_lm
 #SBATCH --partition=nbloom
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --time=02:00:00
-#SBATCH --output=logs/quality_checks_%j.out
-#SBATCH --error=logs/quality_checks_%j.err
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/sentiment_lm_%j.out
+#SBATCH --error=logs/sentiment_lm_%j.err
 
 # ============================================================
-# Data Quality Checks — SLURM wrapper
-# Submit from project root: sbatch scripts/slurm_quality_checks.sh
+# L-M Sentiment Analysis — SLURM wrapper
+# Submit from project root: sbatch scripts/slurm_sentiment_analysis.sh
 # ============================================================
 
 set -e
@@ -26,10 +26,12 @@ echo "Start: $(date)"
 echo "Memory requested: $SLURM_MEM_PER_NODE MB"
 echo "============================================================"
 
-# Create logs directory if needed
 mkdir -p "$PROJECT_ROOT/logs"
 
-# Activate virtual environment if it exists
+# Load Python module (required on compute nodes)
+module load python/3.12
+
+# Activate virtual environment
 if [ -f "$PROJECT_ROOT/venv/bin/activate" ]; then
     source "$PROJECT_ROOT/venv/bin/activate"
     echo "Activated venv"
@@ -38,13 +40,25 @@ elif [ -f "$HOME/.venvs/ai-enthusiasm/bin/activate" ]; then
     echo "Activated ~/.venvs/ai-enthusiasm"
 fi
 
-# Run quality checks with all reference files
-python3 "$PROJECT_ROOT/src/data_analysis/data_quality_checks.py" \
+# Full scoring (all posts, then slice subsets)
+# Chunk size 100K balances memory vs overhead.
+# Increase --mem to 96G if OOM on the tagging/subset step.
+python3 "$PROJECT_ROOT/src/data_analysis/sentiment_analysis_full.py" \
     --posts "$PROJECT_ROOT/data/processed/all_people_linkedin_urls/scraped_posts_combined/posts_combined.csv" \
-    --urls "$PROJECT_ROOT/data/processed/all_people_linkedin_urls/all_linkedin_urls.csv" \
-    --directors "$PROJECT_ROOT/data/raw/directors.csv" \
-    --output-dir "$PROJECT_ROOT/outputs/quality_checks"
+    --lm-dict "$PROJECT_ROOT/data/Loughran-McDonald_MasterDictionary_1993-2024.csv" \
+    --output-dir "$PROJECT_ROOT/outputs/sentiment_results" \
+    --chunk-size 100000
 
 echo "============================================================"
 echo "End: $(date)"
 echo "Exit code: $?"
+
+# ============================================================
+# ALTERNATIVE: AI-only mode (faster, ~30min, 32GB sufficient)
+# Uncomment below and comment out the full scoring block above
+# ============================================================
+# python3 "$PROJECT_ROOT/src/data_analysis/sentiment_analysis_full.py" \
+#     --posts "$PROJECT_ROOT/data/processed/all_people_linkedin_urls/scraped_posts_combined/posts_combined.csv" \
+#     --lm-dict "$PROJECT_ROOT/data/Loughran-McDonald_MasterDictionary_1993-2024.csv" \
+#     --output-dir "$PROJECT_ROOT/outputs/sentiment_results" \
+#     --ai-only

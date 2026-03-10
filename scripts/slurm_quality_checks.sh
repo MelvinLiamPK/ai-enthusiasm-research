@@ -29,6 +29,9 @@ echo "============================================================"
 # Create logs directory if needed
 mkdir -p "$PROJECT_ROOT/logs"
 
+# Load Python module (required on compute nodes)
+module load python/3.12
+
 # Activate virtual environment if it exists
 if [ -f "$PROJECT_ROOT/venv/bin/activate" ]; then
     source "$PROJECT_ROOT/venv/bin/activate"
