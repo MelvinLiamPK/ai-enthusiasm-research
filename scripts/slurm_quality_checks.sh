@@ -16,9 +16,8 @@
 
 set -e
 
-# Resolve project root from this script's location
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# SLURM_SUBMIT_DIR = directory where sbatch was called (should be project root)
+PROJECT_ROOT="$SLURM_SUBMIT_DIR"
 
 echo "Project root: $PROJECT_ROOT"
 echo "Job ID: $SLURM_JOB_ID"
