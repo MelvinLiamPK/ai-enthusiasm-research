@@ -12,7 +12,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 POSTS_PATH = PROJECT_ROOT / "data" / "processed" / "all_people_linkedin_urls" / "scraped_posts_combined" / "posts_combined.csv"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 

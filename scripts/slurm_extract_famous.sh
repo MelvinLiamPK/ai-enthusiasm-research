@@ -11,4 +11,4 @@ module load python/3.12
 source "$PROJECT_ROOT/venv/bin/activate"
 pip install openpyxl --quiet 2>/dev/null
 
-python3 "$PROJECT_ROOT/extract_famous_posts.py"
+python3 "$PROJECT_ROOT/src/data_analysis/extract_famous_posts.py"
