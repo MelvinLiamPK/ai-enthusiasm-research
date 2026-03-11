@@ -43,6 +43,24 @@ AI_KEYWORDS = [
 # Helper Functions
 # =======================
 
+def create_ai_keyword_pattern():
+    """
+    Create a regex pattern for matching AI keywords with word boundaries.
+    This prevents false positives like "innovation" matching "automation".
+    """
+    patterns = []
+    for kw in AI_KEYWORDS:
+        # For keywords with spaces already (like ' ai '), use exact matching
+        if kw.startswith(' ') and kw.endswith(' '):
+            # Convert ' ai ' to '\s+ai\s+' for regex
+            patterns.append(r'\s+' + re.escape(kw.strip()) + r'\s+')
+        else:
+            # For other keywords, use word boundaries
+            patterns.append(r'\b' + re.escape(kw) + r'\b')
+    
+    # Combine all patterns with OR
+    return '|'.join(patterns)
+
 def print_section(title):
     print("\n" + "=" * 80)
     print(f"  {title}")
@@ -109,7 +127,7 @@ def load_all_posts(data_dir, filename=None):
     original_len = len(combined)
     combined = combined.drop_duplicates(subset=['post_url'], keep='first')
     if len(combined) < original_len:
-        print(f"  ⚠️  Removed {original_len - len(combined):,} duplicate posts")
+        print(f"  âÅ¡Â ïÂ¸Â  Removed {original_len - len(combined):,} duplicate posts")
     
     return combined
 
@@ -208,12 +226,12 @@ def data_overview(posts_df):
             print(f"   Date range: {posts_df.loc[valid_dates, 'post_datetime'].min().date()} to {posts_df.loc[valid_dates, 'post_datetime'].max().date()}")
             print(f"   Posts with valid dates: {valid_dates.sum():,} ({valid_dates.sum()/len(posts_df)*100:.1f}%)")
     
-    print(f"\n📋 Available Columns:")
+    print(f"\nðÅ¸â€œâ€¹ Available Columns:")
     for col in posts_df.columns:
         print(f"   - {col}")
     
     # Missing data
-    print(f"\n❓ Missing Data (>50%):")
+    print(f"\nâÂâ€œ Missing Data (>50%):")
     missing = posts_df.isnull().sum()
     missing_pct = (missing / len(posts_df) * 100).round(1)
     for col in missing[missing > 0].index:
@@ -230,7 +248,7 @@ def data_quality_checks(posts_df):
             profile_col = col
             break
     
-    print(f"\n🔍 Critical Fields:")
+    print(f"\nðÅ¸â€Â Critical Fields:")
     if profile_col:
         print(f"   Posts with missing {profile_col}: {posts_df[profile_col].isna().sum():,}")
     print(f"   Posts with missing post_url: {posts_df['post_url'].isna().sum():,}")
@@ -242,30 +260,30 @@ def data_quality_checks(posts_df):
     has_director = 'director_name' in posts_df.columns
     
     if has_company or has_ticker or has_director:
-        print(f"\n🔍 Director/Company Metadata:")
-        print(f"   company_name column: {'✓ Present' if has_company else '✗ Missing'}")
-        print(f"   ticker column: {'✓ Present' if has_ticker else '✗ Missing'}")
-        print(f"   director_name column: {'✓ Present' if has_director else '✗ Missing'}")
+        print(f"\nðÅ¸â€Â Director/Company Metadata:")
+        print(f"   company_name column: {'✓ Present' if has_company else 'âÅ“â€” Missing'}")
+        print(f"   ticker column: {'✓ Present' if has_ticker else 'âÅ“â€” Missing'}")
+        print(f"   director_name column: {'✓ Present' if has_director else 'âÅ“â€” Missing'}")
         
         if has_company:
             null_company = posts_df['company_name'].isna().sum()
             pct = null_company/len(posts_df)*100
-            status = "⚠️  CRITICAL" if pct > 90 else "✓"
+            status = "âÅ¡Â ïÂ¸Â  CRITICAL" if pct > 90 else "✓"
             print(f"   {status} Posts missing company: {null_company:,} ({pct:.1f}%)")
         
         if has_ticker:
             null_ticker = posts_df['ticker'].isna().sum()
             pct = null_ticker/len(posts_df)*100
-            status = "⚠️  CRITICAL" if pct > 90 else "✓"
+            status = "âÅ¡Â ïÂ¸Â  CRITICAL" if pct > 90 else "✓"
             print(f"   {status} Posts missing ticker: {null_ticker:,} ({pct:.1f}%)")
         
         if has_director:
             null_director = posts_df['director_name'].isna().sum()
             pct = null_director/len(posts_df)*100
-            status = "⚠️  CRITICAL" if pct > 90 else "✓"
+            status = "âÅ¡Â ïÂ¸Â  CRITICAL" if pct > 90 else "✓"
             print(f"   {status} Posts missing director: {null_director:,} ({pct:.1f}%)")
     
-    print(f"\n🔍 Content Quality:")
+    print(f"\nðÅ¸â€Â Content Quality:")
     if 'post_text' in posts_df.columns:
         empty_text = (posts_df['post_text'].isna() | (posts_df['post_text'] == '')).sum()
         print(f"   Empty/missing text: {empty_text:,} ({empty_text/len(posts_df)*100:.1f}%)")
@@ -273,29 +291,29 @@ def data_quality_checks(posts_df):
     # Check engagement data
     if 'total_engagement' in posts_df.columns:
         zero_engagement = (posts_df['total_engagement'] == 0).sum()
-        print(f"\n🔍 Engagement Data:")
+        print(f"\nðÅ¸â€Â Engagement Data:")
         print(f"   Posts with 0 engagement: {zero_engagement:,} ({zero_engagement/len(posts_df)*100:.1f}%)")
         has_engagement = (posts_df['total_engagement'] > 0).sum()
         print(f"   Posts with >0 engagement: {has_engagement:,} ({has_engagement/len(posts_df)*100:.1f}%)")
         if zero_engagement/len(posts_df) > 0.9:
-            print(f"   ⚠️  WARNING: >90% posts have 0 engagement - likely data extraction issue")
+            print(f"   âÅ¡Â ïÂ¸Â  WARNING: >90% posts have 0 engagement - likely data extraction issue")
 
 def temporal_analysis(posts_df):
     print_section("TEMPORAL ANALYSIS")
     
     if 'post_datetime' not in posts_df.columns or posts_df['post_datetime'].isna().all():
-        print("⚠️  No valid dates found")
+        print("âÅ¡Â ïÂ¸Â  No valid dates found")
         return
     
     dated = posts_df[posts_df['post_datetime'].notna()].copy()
     
-    print(f"\n📅 Posts by Year:")
+    print(f"\nðÅ¸â€œâ€¦ Posts by Year:")
     year_counts = dated['post_year'].value_counts().sort_index()
     for year, count in year_counts.items():
         pct = count / len(dated) * 100
         print(f"   {int(year)}: {count:,} posts ({pct:.1f}%)")
     
-    print(f"\n📆 Recent Months (last 12):")
+    print(f"\nðÅ¸â€œâ€  Recent Months (last 12):")
     monthly = dated['post_month'].value_counts().sort_index().tail(12)
     for month, count in monthly.items():
         print(f"   {month}: {count:,} posts")
@@ -303,7 +321,7 @@ def temporal_analysis(posts_df):
     # Posting frequency
     date_range = (dated['post_datetime'].max() - dated['post_datetime'].min()).days
     if date_range > 0:
-        print(f"\n⏰ Activity Metrics:")
+        print(f"\nâÂÂ° Activity Metrics:")
         print(f"   Time span: {date_range:,} days")
         print(f"   Avg posts per day: {len(dated) / date_range:.1f}")
 
@@ -311,19 +329,19 @@ def engagement_analysis(posts_df):
     print_section("ENGAGEMENT METRICS")
     
     if 'total_engagement' not in posts_df.columns:
-        print("⚠️  Engagement data unavailable")
+        print("âÅ¡Â ïÂ¸Â  Engagement data unavailable")
         return
     
     # Check if we have meaningful engagement data
     has_engagement = (posts_df['total_engagement'] > 0).any()
     
     if not has_engagement:
-        print("⚠️  WARNING: All posts show 0 engagement")
+        print("âÅ¡Â ïÂ¸Â  WARNING: All posts show 0 engagement")
         print("   This likely indicates an issue with the data collection/export process.")
         print("   Engagement metrics may need to be re-scraped or extracted from raw JSON.")
         return
     
-    print(f"\n💬 Total Engagement:")
+    print(f"\nðÅ¸â€™Â¬ Total Engagement:")
     print(f"   Likes: {posts_df['likes'].sum():,}")
     print(f"   Comments: {posts_df['comments'].sum():,}")
     print(f"   Reposts: {posts_df['reposts'].sum():,}")
@@ -338,7 +356,7 @@ def engagement_analysis(posts_df):
         print(f"   Comments: {engaged['comments'].mean():.1f} (median: {engaged['comments'].median():.0f})")
         print(f"   Reposts: {engaged['reposts'].mean():.1f} (median: {engaged['reposts'].median():.0f})")
         
-        print(f"\n🏆 Top 5 Most Engaged Posts:")
+        print(f"\nðÅ¸Ââ€  Top 5 Most Engaged Posts:")
         top = engaged.nlargest(5, 'total_engagement')[['profile_name', 'post_datetime', 'total_engagement', 'post_text']]
         for idx, row in top.iterrows():
             text = str(row['post_text'])[:80] + '...' if len(str(row['post_text'])) > 80 else str(row['post_text'])
@@ -350,12 +368,12 @@ def content_analysis(posts_df):
     print_section("CONTENT ANALYSIS")
     
     if 'text_length' not in posts_df.columns:
-        print("⚠️  Text analysis unavailable")
+        print("âÅ¡Â ïÂ¸Â  Text analysis unavailable")
         return
     
     with_text = posts_df[posts_df['text_length'] > 0]
     
-    print(f"\n📝 Text Statistics:")
+    print(f"\nðÅ¸â€œÂ Text Statistics:")
     print(f"   Posts with text: {len(with_text):,} ({len(with_text)/len(posts_df)*100:.1f}%)")
     print(f"   Avg length: {with_text['text_length'].mean():.0f} chars")
     print(f"   Avg words: {with_text['word_count'].mean():.0f}")
@@ -373,7 +391,7 @@ def content_analysis(posts_df):
     
     # Post types
     if 'post_type' in posts_df.columns:
-        print(f"\n🎯 Post Type Distribution:")
+        print(f"\nðÅ¸Å½Â¯ Post Type Distribution:")
         type_counts = posts_df['post_type'].value_counts()
         for post_type, count in type_counts.items():
             pct = count / len(posts_df) * 100
@@ -383,7 +401,7 @@ def ai_keyword_analysis(posts_df):
     print_section("AI KEYWORD ANALYSIS")
     
     if 'post_text' not in posts_df.columns:
-        print("⚠️  No text data")
+        print("âÅ¡Â ïÂ¸Â  No text data")
         return
     
     posts_df['text_lower'] = posts_df['post_text'].fillna('').str.lower()
@@ -391,14 +409,21 @@ def ai_keyword_analysis(posts_df):
     # Count keywords
     keyword_counts = {}
     for kw in AI_KEYWORDS:
-        count = posts_df['text_lower'].str.contains(kw, case=False, regex=False, na=False).sum()
+        # Create pattern for this specific keyword with word boundaries
+        if kw.startswith(' ') and kw.endswith(' '):
+            pattern = r'\s+' + re.escape(kw.strip()) + r'\s+'
+        else:
+            pattern = r'\b' + re.escape(kw) + r'\b'
+        
+        count = posts_df['text_lower'].str.contains(pattern, case=False, regex=True, na=False).sum()
         if count > 0:
             keyword_counts[kw] = count
     
-    # Any AI mention
-    total_ai = posts_df['text_lower'].str.contains('|'.join([kw for kw in AI_KEYWORDS]), case=False, na=False).sum()
+    # Any AI mention (using combined pattern with word boundaries)
+    ai_pattern = create_ai_keyword_pattern()
+    total_ai = posts_df['text_lower'].str.contains(ai_pattern, case=False, regex=True, na=False).sum()
     
-    print(f"\n🤖 AI Content Summary:")
+    print(f"\nðÅ¸Â¤â€“ AI Content Summary:")
     print(f"   Posts mentioning AI keywords: {total_ai:,} ({total_ai/len(posts_df)*100:.2f}%)")
     print(f"   Posts NOT mentioning AI: {len(posts_df) - total_ai:,} ({(len(posts_df) - total_ai)/len(posts_df)*100:.2f}%)")
     
@@ -410,9 +435,9 @@ def ai_keyword_analysis(posts_df):
             print(f"      '{kw}': {count:,} ({pct:.2f}%)")
     
     # Sample AI posts
-    ai_posts = posts_df[posts_df['text_lower'].str.contains('|'.join(AI_KEYWORDS), case=False, na=False)]
+    ai_posts = posts_df[posts_df['text_lower'].str.contains(ai_pattern, case=False, regex=True, na=False)]
     if len(ai_posts) > 0:
-        print(f"\n   📄 Sample AI-related posts:")
+        print(f"\n   ðÅ¸â€œâ€ž Sample AI-related posts:")
         sample = ai_posts.sample(min(3, len(ai_posts)))
         for idx, row in sample.iterrows():
             text = str(row['post_text'])[:120] + '...' if len(str(row['post_text'])) > 120 else str(row['post_text'])
@@ -441,7 +466,7 @@ def director_analysis(posts_df):
         name_col: 'first'
     }).rename(columns={'post_url': 'post_count', name_col: 'name'})
     
-    print(f"\n👥 Director Activity:")
+    print(f"\nðÅ¸â€˜Â¥ Director Activity:")
     print(f"   Unique directors (profiles): {len(stats):,}")
     print(f"   Avg posts per director: {stats['post_count'].mean():.1f}")
     print(f"   Median posts per director: {stats['post_count'].median():.0f}")
@@ -457,7 +482,7 @@ def director_analysis(posts_df):
         pct = count / len(stats) * 100
         print(f"   {label} posts: {count:,} directors ({pct:.1f}%)")
     
-    print(f"\n🏆 Top 10 Most Active Directors:")
+    print(f"\nðÅ¸Ââ€  Top 10 Most Active Directors:")
     top = stats.nlargest(10, 'post_count')
     for profile_url, row in top.iterrows():
         name = row['name'] if pd.notna(row['name']) else profile_url.split('/')[-1][:50]
@@ -491,7 +516,7 @@ Examples:
     print("=" * 80)
     
     # Load
-    print("\n📂 Loading data...")
+    print("\nðÅ¸â€œâ€š Loading data...")
     try:
         if args.all:
             # Force loading all files by not looking for reextracted first
@@ -500,7 +525,7 @@ Examples:
                 posts_files = list(DATA_DIR.glob("posts_reextracted_*.csv"))
             
             if not posts_files:
-                print(f"❌ No posts files found in {DATA_DIR}")
+                print(f"âÂÅ’ No posts files found in {DATA_DIR}")
                 return
             
             print(f"Found {len(posts_files)} posts files:")
@@ -514,16 +539,16 @@ Examples:
             original_len = len(posts_df)
             posts_df = posts_df.drop_duplicates(subset=['post_url'], keep='first')
             if len(posts_df) < original_len:
-                print(f"  ⚠️  Removed {original_len - len(posts_df):,} duplicate posts")
+                print(f"  âÅ¡Â ïÂ¸Â  Removed {original_len - len(posts_df):,} duplicate posts")
         else:
             posts_df = load_all_posts(DATA_DIR, filename=args.filename)
         
         posts_df = clean_posts_data(posts_df)
     except FileNotFoundError as e:
-        print(f"❌ Error: {e}")
+        print(f"âÂÅ’ Error: {e}")
         return
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"âÂÅ’ Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         return
@@ -539,12 +564,12 @@ Examples:
     
     # Next steps
     print_section("NEXT STEPS & RECOMMENDATIONS")
-    print("\n📋 Immediate Actions:")
-    print("   1. ⚠️  CRITICAL: Merge posts with director/company metadata")
+    print("\nðÅ¸â€œâ€¹ Immediate Actions:")
+    print("   1. âÅ¡Â ïÂ¸Â  CRITICAL: Merge posts with director/company metadata")
     print("      - Match profile_input to verified directors CSV")
     print("      - Add company_name, ticker, director_name columns")
     
-    print("\n📋 Analysis Phase:")
+    print("\nðÅ¸â€œâ€¹ Analysis Phase:")
     print("   2. Develop AI sentiment scoring algorithm")
     print("   3. Temporal trend analysis for AI enthusiasm")
     print("   4. Company-level aggregations and rankings")
