@@ -29,11 +29,12 @@ echo "============================================================"
 
 mkdir -p "$PROJECT_ROOT/logs"
 
-# Load modules
+# Load modules (py312 versions match python/3.12; includes CUDA support)
 module load python/3.12
-module load cuda/12.1.1 2>/dev/null || module load cuda 2>/dev/null || true
+module load py-pytorch/2.4.1_py312
+module load py-transformers/4.39.1_py312
 
-# Activate virtual environment
+# Activate virtual environment (for other project deps)
 if [ -f "$PROJECT_ROOT/venv/bin/activate" ]; then
     source "$PROJECT_ROOT/venv/bin/activate"
     echo "Activated venv"
@@ -41,9 +42,6 @@ elif [ -f "$HOME/.venvs/ai-enthusiasm/bin/activate" ]; then
     source "$HOME/.venvs/ai-enthusiasm/bin/activate"
     echo "Activated ~/.venvs/ai-enthusiasm"
 fi
-
-# Ensure dependencies are installed
-pip install --quiet transformers torch
 
 # Full scoring — reads most recent L-M output by default, appends FinBERT columns
 python3 "$PROJECT_ROOT/src/data_analysis/sentiment_finbert.py" \
