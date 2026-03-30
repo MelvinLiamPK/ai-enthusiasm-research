@@ -29,6 +29,10 @@ echo "============================================================"
 
 mkdir -p "$PROJECT_ROOT/logs"
 
+# Use scratch for HuggingFace model cache (avoids filling home quota)
+export HF_HOME="$SCRATCH/huggingface_cache"
+echo "HF_HOME: $HF_HOME"
+
 # Load modules (py312 versions match python/3.12; includes CUDA support)
 module load python/3.12
 module load py-pytorch/2.4.1_py312
