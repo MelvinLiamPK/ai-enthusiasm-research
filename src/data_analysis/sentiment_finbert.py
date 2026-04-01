@@ -66,13 +66,20 @@ def default_paths():
 
 
 def _find_latest_lm_output(output_dir):
-    """Find the most recent sentiment_all_posts_*.csv from the L-M run."""
+    """Find the most recent sentiment_all_posts_*.csv that has L-M columns but NOT FinBERT columns."""
     output_dir = Path(output_dir)
     if not output_dir.exists():
         return None
     candidates = sorted(output_dir.glob('sentiment_all_posts_*.csv'))
+    # Check from newest to oldest, skip files that already have FinBERT scores
+    for path in reversed(candidates):
+        sample = pd.read_csv(path, engine='c', lineterminator='\n',
+                             on_bad_lines='skip', nrows=1)
+        if 'lm_net_sentiment' in sample.columns and 'finbert_positive' not in sample.columns:
+            return path
+    # Fall back to most recent if all have FinBERT (re-run scenario)
     if candidates:
-        return candidates[-1]  # Most recent by timestamp suffix
+        return candidates[-1]
     return None
 
 
