@@ -1,0 +1,28 @@
+Staggered Panel Regression — Annual stock return
+============================================================
+Outcome: stock_return
+Sample: strong-match only (strict)
+Min posts filter: n_posts >= 10
+Lead: t+1
+
+[mean_net_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                      -0.0004   0.0004   -0.93   0.352   5,956  0.0001 
+  (2) + Year FE                        0.0000   0.0004    0.02   0.986   5,956  0.0000 
+  (3) + Controls                       0.0000   0.0004    0.11   0.909   5,956  0.0061 
+  (4) + Firm FE (saturated)           -0.0000   0.0006   -0.01   0.996   5,956  0.0451 
+
+[engagement_wtd_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                      -0.0007   0.0003   -1.98   0.048   5,956  0.0006 **
+  (2) + Year FE                       -0.0004   0.0003   -1.36   0.174   5,956  0.0003 
+  (3) + Controls                      -0.0004   0.0003   -1.35   0.177   5,956  0.0064 
+  (4) + Firm FE (saturated)           -0.0004   0.0004   -0.99   0.324   5,956  0.0453 
+
+[role_wtd_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                      -0.0003   0.0004   -0.82   0.411   5,956  0.0001 
+  (2) + Year FE                        0.0000   0.0004    0.04   0.966   5,956  0.0000 
+  (3) + Controls                       0.0000   0.0004    0.12   0.901   5,956  0.0061 
+  (4) + Firm FE (saturated)            0.0001   0.0006    0.16   0.873   5,956  0.0452 
+

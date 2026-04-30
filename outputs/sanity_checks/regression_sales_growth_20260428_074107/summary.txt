@@ -1,0 +1,28 @@
+Staggered Panel Regression — Sales growth (Δlog sale)
+============================================================
+Outcome: sales_growth
+Sample: strong-match only (fuzzy)
+Min posts filter: n_posts >= 10
+Lead: t+1
+
+[mean_net_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                      -0.0005   0.0002   -2.58   0.010   7,125  0.0011 ***
+  (2) + Year FE                       -0.0000   0.0002   -0.07   0.940   7,125  0.0000 
+  (3) + Controls                       0.0000   0.0002    0.06   0.952   7,125  0.0127 
+  (4) + Firm FE (saturated)            0.0003   0.0002    1.08   0.278   7,125  0.0546 
+
+[engagement_wtd_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                      -0.0004   0.0001   -2.51   0.012   7,125  0.0009 **
+  (2) + Year FE                       -0.0001   0.0001   -0.62   0.537   7,125  0.0001 
+  (3) + Controls                      -0.0001   0.0001   -0.65   0.514   7,125  0.0127 
+  (4) + Firm FE (saturated)            0.0001   0.0002    0.74   0.461   7,125  0.0546 
+
+[role_wtd_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                      -0.0005   0.0002   -2.54   0.011   7,125  0.0010 **
+  (2) + Year FE                        0.0000   0.0002    0.01   0.993   7,125  0.0000 
+  (3) + Controls                       0.0000   0.0002    0.16   0.873   7,125  0.0127 
+  (4) + Firm FE (saturated)            0.0003   0.0002    1.18   0.239   7,125  0.0546 
+

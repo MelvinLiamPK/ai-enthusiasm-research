@@ -1,0 +1,10 @@
+ChatGPT (Nov 2022) break test — AI post share
+==================================================
+  Pre-ChatGPT:   n=   697,484   share= 1.563%
+  Post-ChatGPT:  n=   652,516   share= 8.893%
+  Ratio:         5.69x
+  z-stat:        193.34
+
+Interpretation:
+  - Ratio should be > 2x if the AI filter captures the post-ChatGPT surge.
+  - If ratio < 1.5x, investigate the AI keyword list before trusting downstream work.

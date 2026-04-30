@@ -1,0 +1,28 @@
+Staggered Panel Regression — ROA (ni / at)
+============================================================
+Outcome: roa
+Sample: strong-match only (fuzzy)
+Min posts filter: n_posts >= 10
+Lead: t+1
+
+[mean_net_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                       0.0003   0.0001    2.14   0.032   7,125  0.0012 **
+  (2) + Year FE                        0.0003   0.0001    1.99   0.046   7,125  0.0011 **
+  (3) + Controls                       0.0003   0.0001    2.97   0.003   7,125  0.2384 ***
+  (4) + Firm FE (saturated)            0.0002   0.0001    1.72   0.085   7,125  0.0495 *
+
+[engagement_wtd_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                       0.0001   0.0001    1.44   0.149   7,125  0.0005 
+  (2) + Year FE                        0.0002   0.0001    1.64   0.100   7,125  0.0006 
+  (3) + Controls                       0.0002   0.0001    2.24   0.025   7,125  0.2378 **
+  (4) + Firm FE (saturated)            0.0001   0.0001    0.81   0.415   7,125  0.0495 
+
+[role_wtd_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                       0.0003   0.0001    2.19   0.029   7,125  0.0012 **
+  (2) + Year FE                        0.0003   0.0001    2.05   0.040   7,125  0.0011 **
+  (3) + Controls                       0.0003   0.0001    3.09   0.002   7,125  0.2385 ***
+  (4) + Firm FE (saturated)            0.0002   0.0001    1.91   0.056   7,125  0.0496 *
+

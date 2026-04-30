@@ -1,0 +1,20 @@
+Tobin's Q Panel Regression — Staggered build-up
+============================================================
+Sample: full
+AI-post filter: n_ai_posts >= 3
+Lead: t+1
+
+[ai_mean_net_sentiment]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                       0.0013   0.0013    0.99   0.324   1,888  0.0008 
+  (2) + Year FE                        0.0021   0.0013    1.61   0.107   1,888  0.0022 
+  (3) + Controls                       0.0015   0.0011    1.42   0.155   1,888  0.3005 
+  (4) + Firm FE (saturated)           -0.0006   0.0008   -0.70   0.485   1,888  0.1398 
+
+[ai_post_share]
+  Layer                                     β       SE       t       p       N      R²
+  (1) Pooled OLS                       0.5994   0.2489    2.41   0.016   1,888  0.0066 **
+  (2) + Year FE                        0.8391   0.2831    2.96   0.003   1,888  0.0121 ***
+  (3) + Controls                       0.2519   0.2201    1.14   0.253   1,888  0.3005 
+  (4) + Firm FE (saturated)           -0.0554   0.1805   -0.31   0.759   1,888  0.1388 
+

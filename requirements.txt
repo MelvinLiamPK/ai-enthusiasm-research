@@ -10,7 +10,8 @@ wrds>=3.1.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 
-# Data Analysis (add as needed)
+# Data Analysis
+linearmodels>=6.0      # PanelOLS for sentiment_q_regression.py
 # scipy>=1.11.0
 # scikit-learn>=1.3.0
 # statsmodels>=0.14.0
@@ -19,8 +20,8 @@ python-dotenv>=1.0.0
 # nltk>=3.8.0
 # textblob>=0.17.0
 
-# Visualization (add as needed)
-# matplotlib>=3.7.0
+# Visualization
+matplotlib>=3.7.0      # face_validity_checks.py plots
 # seaborn>=0.12.0
 
 # Jupyter (optional)

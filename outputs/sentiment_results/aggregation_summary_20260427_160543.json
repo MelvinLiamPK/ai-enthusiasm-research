@@ -1,0 +1,25 @@
+{
+  "timestamp": "20260427_160543",
+  "input_file": "sentiment_all_posts_20260330_160559.csv",
+  "prototype_n": null,
+  "min_posts_filter": 1,
+  "revelio_available": true,
+  "tables": {
+    "annual": {
+      "rows": 29191,
+      "companies": 2780
+    },
+    "quarterly": {
+      "rows": 86491,
+      "companies": 2780
+    },
+    "annual_ai_only": {
+      "rows": 8414,
+      "companies": 1992
+    },
+    "quarterly_ai_only": {
+      "rows": 16610,
+      "companies": 1992
+    }
+  }
+}
