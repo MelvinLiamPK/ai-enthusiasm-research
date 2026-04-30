@@ -10,6 +10,8 @@ data/processed/
 *.feather
 *.pkl
 *.pickle
+# SQLite outputs of the WRDS extractors — regenerable
+*.db
 
 # Keep sample data
 !data/samples/
@@ -88,6 +90,13 @@ logs/
 tmp/
 temp/
 *.tmp
+.Rhistory
+
+# Auto-rendered HTML preview of sentiment_diagnostics.md (regenerated locally)
+docs/research_notes/*.html
+
+# Local Claude Code project instructions (not for upstream)
+CLAUDE.md
 
 # =========================
 # Apify & Scraping

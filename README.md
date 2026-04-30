@@ -1,403 +1,350 @@
-# LinkedIn Director Posts Scraper
+# AI Enthusiasm Among Corporate Leaders — LinkedIn Analysis Pipeline
 
-A pipeline to scrape LinkedIn posts from corporate directors for AI enthusiasm research.
+Research pipeline measuring AI enthusiasm among corporate board directors, executives, and blockholders through sentiment analysis of their LinkedIn posts. Supervised by Nick Bloom (Stanford) and John Van Reenen (LSE).
 
-## Overview
+## Research Question
 
-This pipeline extracts LinkedIn posts from S&P 500 company directors in four steps:
+Do corporate leaders who express genuine enthusiasm for AI on LinkedIn differ systematically from those who don't? This project builds a dataset linking individuals' public statements about AI to their corporate roles, enabling analysis of how AI sentiment varies across firms, industries, and governance positions.
 
-| Step | Script | Purpose | API Used |
-|------|--------|---------|----------|
-| 0 | `build_sp500_directors.py` | Build S&P 500 directors dataset | WRDS |
-| 1 | `prepare_linkedin_queries_sp500.py` | Clean names, generate search queries | None |
-| 2 | `find_linkedin_urls_sp500.py` | Find LinkedIn profile URLs | Google Custom Search |
-| 3 | `scrape_linkedin_posts_sp500.py` | Scrape posts from profiles | Apify |
+## Pipeline Overview
 
-> **Note:** There are two versions of each script:
-> - **S&P 500 version** (`*_sp500.py`) - Pilot/prototype with ~9,400 directors (~$90)
-> - **Full version** - All ~176,000 directors (~$1,600)
-> 
-> Run the S&P 500 pilot first to validate the pipeline before scaling to the full dataset.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. DATA EXTRACTION (Mac, WRDS)                        COMPLETE │
+│     build_directors.py  →  272,646 director-company-year rows   │
+│     build_executives.py →  167,071 executive records            │
+│     build_blockholders.py → 37,762 blockholder records          │
+│                                                                 │
+│  2. DEDUPLICATION (Mac)                                COMPLETE │
+│     combine_people.py   →  96,968 unique person-company pairs   │
+│                                                                 │
+│  3. LINKEDIN URL DISCOVERY (Sherlock, Google API)      COMPLETE │
+│     find_urls.py        →  42,527 verified LinkedIn URLs        │
+│     ├── 96,971 queries, ~$485                                   │
+│     └── ~10 days at 10,000 queries/day                          │
+│                                                                 │
+│  4. POST SCRAPING (Sherlock, Apify)                    COMPLETE │
+│     scrape_posts.py     →  2.2M posts from 26,367 profiles      │
+│     ├── Automatic pagination (up to 10,000 posts/profile)       │
+│     ├── Checkpoint/resume for long runs                         │
+│     └── Total cost: ~$5,500                                     │
+│                                                                 │
+│  5. SENTIMENT ANALYSIS                                 UPCOMING │
+│     Loughran-McDonald dictionary + FinBERT                      │
+│     AI keyword filtering vs baseline (e.g. COVID-19)            │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## Project Structure
 
 ```
 ai-enthusiasm-research/
-├── .env                                    # API credentials (create this)
-├── .gitignore
-├── README.md
-├── requirements.txt
-├── config/
-│   └── config_template.py
+├── src/
+│   ├── data_extraction/              # WRDS queries → CSV/DB files
+│   │   ├── build_directors.py        #   ExecuComp directorcomp table
+│   │   ├── build_executives.py       #   ExecuComp anncomp table
+│   │   ├── build_blockholders.py     #   Schwartz-Ziv/Volkova SEC filings
+│   │   └── combine_people.py         #   Merge + deduplicate all sources
+│   ├── data_collection/              # LinkedIn URL discovery + scraping
+│   │   ├── find_urls.py              #   Google Custom Search → LinkedIn URLs
+│   │   ├── scrape_posts.py           #   Apify → LinkedIn posts (generic, SLURM-compatible)
+│   │   └── linkedin_verification.py  #   Name-matching verification module
+│   ├── data_processing/              # Data cleaning + merging
+│   │   ├── merge_all_batches.py      #   Combine scrape batches into final dataset
+│   │   ├── convert_temp_results.py   #   Convert JSONL temp files → CSV
+│   │   ├── extract_remaining_urls.py #   Find unscraped profiles
+│   │   ├── add_capped_to_remaining.py #  Add capped profiles to retry list
+│   │   └── merge_posts_with_metadata.py # (legacy S&P 500 version)
+│   └── data_analysis/                # Sentiment analysis
+│       ├── analysisAI_LM.py          #   AI posts — L-M dictionary (S&P 500 pilot)
+│       ├── covid_sentiment_LM.py     #   COVID baseline — L-M dictionary
+│       ├── lm_dictionary_loader.py   #   L-M dictionary helper
+│       ├── sanity_check.py           #   Data quality checks
+│       └── inspect_posts.py          #   Post content inspection
 ├── data/
-│   ├── raw/
-│   │   └── directors.csv                   # Input: WRDS director data (all companies)
-│   ├── sp500/                              # Step 0 output: S&P 500 filtered data
-│   │   ├── sp500_directors.csv             # All director-year records (~52k rows)
-│   │   ├── sp500_current_directors.csv     # Most recent year per director (~9.4k rows)
-│   │   ├── sp500_companies.csv             # S&P 500 company list (~500 companies)
-│   │   └── sp500_constituents.csv          # Full S&P 500 membership info
-│   ├── processed/
-│   │   ├── sp500/                          # Step 1 processed output
-│   │   ├── sp500_linkedin_urls/            # Step 2 output
-│   │   ├── sp500_linkedin_posts/           # Step 3 output
-│   │   ├── sp500_checkpoints/              # Progress tracking for S&P 500
-│   │   ├── linkedin_urls/                  # Original workflow output
-│   │   ├── linkedin_posts/                 # Original workflow output
-│   │   └── checkpoints/                    # Original workflow checkpoints
-│   └── samples/
-├── docs/
-├── notebooks/
-├── outputs/
-│   ├── sp500_batches/                      # Step 1 output: S&P 500 batch files
-│   └── *.csv                               # Original workflow batch files
-└── src/
-    ├── analysis/
-    ├── data_collection/
-    │   ├── build_sp500_directors.py        # Step 0: Build S&P 500 dataset
-    │   ├── find_linkedin_urls.py           # Step 2 (full)
-    │   ├── find_linkedin_urls_sp500.py     # Step 2 (pilot)
-    │   ├── scrape_linkedin_posts.py        # Step 3 (full)
-    │   └── scrape_linkedin_posts_sp500.py  # Step 3 (pilot)
-    └── data_processing/
-        ├── prepare_linkedin_queries.py     # Step 1 (full)
-        └── prepare_linkedin_queries_sp500.py # Step 1 (pilot)
+│   ├── raw/                          # Source data
+│   │   └── blockholders.csv          #   Schwartz-Ziv/Volkova dataset
+│   ├── extracted/                    # Output of build scripts
+│   │   ├── directors/                #   directors_all.csv, directors_current.csv
+│   │   ├── executives/               #   executives_all.csv, executives_current.csv
+│   │   ├── blockholders/             #   blockholders_all.csv, blockholders_current.csv
+│   │   └── combined/                 #   all_people.csv (96,968 rows)
+│   ├── processed/                    # Output of collection + processing scripts
+│   │   └── all_people_linkedin_urls/
+│   │       ├── all_linkedin_urls.csv        # Full URL discovery results (96,971 rows)
+│   │       ├── remaining_urls_final.csv     # Profiles not yet scraped / needing retry
+│   │       ├── scraped_posts_batch2/        # Batch 2 output (28,600 profiles attempted)
+│   │       ├── scraped_posts_batch3/        # Batch 3 output (14,041 profiles attempted)
+│   │       └── scraped_posts_combined/      # ← FINAL MERGED DATASET
+│   │           ├── posts_combined.csv       #   2,583,711 rows (2.8 GB)
+│   │           ├── profiles_combined.csv    #   26,367 rows
+│   │           ├── no_posts_combined.csv    #   16,161 profiles with zero posts
+│   │           └── merge_report.txt         #   Merge statistics
+│   └── Loughran-McDonald_MasterDictionary_1993-2024.csv  # L-M dictionary
+├── jobs/                             # SLURM job scripts for Sherlock
+├── logs/                             # SLURM log output
+├── archive/                          # Superseded S&P-500-only scripts
+├── .env                              # API credentials (not in git)
+└── README.md
 ```
 
----
+## Combined Dataset — `scraped_posts_combined/`
 
-## Setup
+The final merged dataset from all scraping batches.
 
-### 1. Install Dependencies
+### posts_combined.csv (2.8 GB)
 
-```bash
-pip3 install pandas requests python-dotenv wrds
-```
+Each row is one post × one company board membership. Directors serving on multiple boards have posts duplicated per board.
 
-Or use the requirements file:
-```bash
-pip3 install -r requirements.txt
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| **Metadata (from input CSV)** | | |
+| `company_name` | str | Company name (e.g. "APPLE INC") |
+| `person_name` | str | Director/executive name |
+| `position` | str | Title (e.g. "CEO, President & Director") |
+| `source` | str | "director", "executive", or "blockholder" |
+| `gvkey` | float | WRDS company identifier |
+| `ticker` | str | Stock ticker |
+| `execid` | float | ExecuComp person ID (executives only; null for directors) |
+| `person_name_clean` | str | Cleaned name (credentials removed) |
+| `company_name_clean` | str | Cleaned company name (Inc/Corp removed) |
+| **Post data (from Apify)** | | |
+| `profile_url` | str | LinkedIn profile URL |
+| `post_text` | str | Full post text (null for pure reshares) |
+| `post_url` | str | Permalink to the post |
+| `post_type` | str | "regular", "repost", or "quote" |
+| `post_date` | str | Datetime string "YYYY-MM-DD HH:MM:SS" |
+| `post_timestamp` | float | Unix timestamp in milliseconds |
+| `author_name` | str | Author name from LinkedIn |
+| `author_headline` | str | Author's LinkedIn headline |
+| **Engagement metrics** | | |
+| `reactions_total` | float | Total reactions (sum of all types) |
+| `likes` | float | Like count |
+| `comments` | float | Comment count |
+| `reposts` | float | Repost count |
+| `celebrates` | float | Celebrate reaction count |
+| `supports` | float | Support reaction count |
+| `loves` | float | Love reaction count |
+| `insights` | float | Insightful reaction count |
+| `funnys` | float | Funny reaction count |
+| **Media & articles** | | |
+| `media_type` | str | "image", "video", or null |
+| `article_url` | str | Shared article URL (null if none) |
+| `article_title` | str | Shared article title |
+| **Reshared content** | | |
+| `reshared_text` | str | Original post text (for quote/repost types) |
+| `reshared_url` | str | Original post URL |
+| `reshared_author` | str | Original post author name |
 
-### 2. Configure WRDS Access (for Step 0)
+### Key Statistics
 
-You need a WRDS account with access to CRSP and ExecuComp.
+| Metric | Value |
+|--------|-------|
+| Total rows | 2,583,711 |
+| Unique posts | 2,194,784 |
+| Unique profiles with posts | 26,367 |
+| Profiles with zero posts | 16,161 |
+| Total verified URLs | 42,527 |
+| Date range | 2013 → 2026-03-07 |
+| Multi-board duplication ratio | 1.18x |
+| Mean posts per profile | 83.2 |
+| Median posts per profile | 17 |
+| Max posts per profile | 4,307 |
+| Profiles with >100 posts | 5,201 |
+| Profiles with >1000 posts | 124 |
 
-Create a `~/.pgpass` file:
-```
-wrds-pgdata.wharton.upenn.edu:9737:wrds:your_username:your_password
-```
+### Post Type Distribution
 
-Set permissions:
-```bash
-chmod 600 ~/.pgpass
-```
+| Type | Count | % | Description |
+|------|-------|---|-------------|
+| regular | ~1.4M | 54.5% | Original posts |
+| repost | ~630K | 24.5% | Shared without commentary (post_text is null) |
+| quote | ~540K | 20.9% | Shared with commentary |
 
-### 3. Configure API Credentials (for Steps 2-3)
+### Posts by Year
 
-Create a `.env` file in the project root:
-
-```
-GOOGLE_API_KEY=your_google_api_key
-GOOGLE_CSE_ID=your_custom_search_engine_id
-APIFY_API_TOKEN=your_apify_token
-```
-
-### 4. Get API Keys
-
-**Google Custom Search API:**
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project and enable "Custom Search API"
-3. Create an API key at APIs & Services → Credentials
-4. Go to [Programmable Search Engine](https://programmablesearchengine.google.com/)
-5. Create a search engine for `linkedin.com`
-6. Copy the Search Engine ID
-
-**Apify:**
-1. Sign up at [Apify.com](https://apify.com/)
-2. Go to Account → Integrations
-3. Copy your API token
-
----
-
-## S&P 500 Pilot 
-
-This pilot workflow processes S&P 500 company directors (~9,400 director-company pairs) to validate the pipeline before scaling to all companies.
-
-### Cost & Time Summary
-
-| Step | Queries | Cost | Time |
-|------|---------|------|------|
-| Step 0: Build dataset | N/A | Free (WRDS) | ~2 min |
-| Step 1: Prepare queries | N/A | Free | ~30 sec |
-| Step 2: Find URLs | 9,423 | **~$47** | ~4 hours |
-| Step 3: Scrape posts | ~8,000* | **~$40** | ~2 hours |
-| **Total** | | **~$87** | ~6 hours |
-
-*Assuming ~85% URL match rate
-
----
-
-### Step 0: Build S&P 500 Directors Dataset
-
-```bash
-cd /Users/melvinliam/Documents/Uni/RA-NB/Scraping/ai-enthusiasm-research
-
-# Build the dataset (uses most recent S&P 500 constituents)
-python3 src/data_collection/build_sp500_directors.py
-
-# Or specify a date
-python3 src/data_collection/build_sp500_directors.py --date 2024-12-31
-```
-
-**Output:** `data/sp500/`
-| File | Description | Rows |
-|------|-------------|------|
-| `sp500_current_directors.csv` | Main input for pipeline | ~9,400 |
-| `sp500_directors.csv` | All director-year records | ~52,000 |
-| `sp500_companies.csv` | Company list | ~500 |
-| `sp500_constituents.csv` | S&P 500 membership info | ~500 |
-
----
-
-### Step 1: Prepare Search Queries
-
-```bash
-cd src/data_processing
-
-# Generate all batch files
-python3 prepare_linkedin_queries_sp500.py
-
-# Or test with one company first
-python3 prepare_linkedin_queries_sp500.py --prototype --company "Apple"
-```
-
-**Output:** `outputs/sp500_batches/`
-- `batch_001_queries.csv` through `batch_010_queries.csv` (~1,000 queries each)
-- `all_search_queries.csv` (combined)
-
----
-
-### Step 2: Find LinkedIn URLs (Google API)
-
-```bash
-cd src/data_collection
-
-# Check status
-python3 find_linkedin_urls_sp500.py --status
-
-# Test with one company (~10 API calls)
-python3 find_linkedin_urls_sp500.py --prototype --company "Apple"
-
-# Process batches
-python3 find_linkedin_urls_sp500.py --batch 1      # Single batch
-python3 find_linkedin_urls_sp500.py --batch all    # All batches
-
-# Combine results when done
-python3 find_linkedin_urls_sp500.py --combine
-```
-
-**Features:**
-- ✅ Checkpoint system - saves every 25 queries, resume anytime
-- ✅ Status command - see progress across all batches
-- ✅ Quota detection - stops gracefully when daily limit hit
-- ✅ Auto-resume - continues from last checkpoint
-
-**Output:** `data/processed/sp500_linkedin_urls/`
-| File | Description |
+| Year | Unique Posts |
 |------|-------------|
-| `batch_001_urls.csv` | Results for batch 1 |
-| `all_sp500_linkedin_urls.csv` | Combined results |
+| 2013 | 2,057 |
+| 2014 | 10,753 |
+| 2015 | 15,850 |
+| 2016 | 45,521 |
+| 2017 | 111,811 |
+| 2018 | 150,972 |
+| 2019 | 169,746 |
+| 2020 | 211,447 |
+| 2021 | 212,541 |
+| 2022 | 228,078 |
+| 2023 | 284,421 |
+| 2024 | 316,275 |
+| 2025 | 365,846 |
+| 2026 | 69,465 |
 
----
+### Known Data Quality Issues
 
-### Step 3: Scrape LinkedIn Posts (Apify)
+1. **~280 empty rows** — Apify placeholder rows with all-null fields. Drop with `df = df[df['profile_url'].notna()]`.
+2. **11.9% null post_text** — Pure reshares/reposts where the director shared content without adding their own text. The reshared content is in `reshared_text`.
+3. **2.1% null ticker** — Companies without a ticker in the ExecuComp database.
+4. **CSV parsing** — The 2.8GB CSV may trigger buffer overflow on pandas' default C parser due to embedded newlines in post text. Use: `pd.read_csv(path, engine="c", lineterminator="\n", on_bad_lines="skip")`.
+5. **16,161 no-posts profiles** — Mix of genuinely inactive LinkedIn accounts and a small number from failed Apify batches (~500-1000 profiles from ~10 failed batches).
+
+## Data Sources
+
+### 1. Directors — WRDS ExecuComp `directorcomp`
+
+Board directors of companies covered by ExecuComp (roughly S&P 1500 constituents).
+
+| Metric | Value |
+|--------|-------|
+| Records | 272,646 |
+| Unique directors | 31,530 |
+| Unique companies | 2,784 |
+| Year range | 2010–2025 |
+
+### 2. Executives — WRDS ExecuComp `anncomp`
+
+Top-5 compensated executives per firm.
+
+| Metric | Value |
+|--------|-------|
+| Records | 167,071 |
+| Unique executives | 32,961 |
+| Unique companies | 2,796 |
+| Year range | 2010–2025 |
+
+### 3. Blockholders — Schwartz-Ziv/Volkova SEC Dataset
+
+Individual investors holding ≥5% of a company's shares.
+
+| Metric | Value |
+|--------|-------|
+| Records | 37,762 |
+| Unique individuals | 14,149 |
+| Year range | 2010–2023 |
+
+### 4. Combined → URL Discovery → Post Scraping
+
+| Stage | Records |
+|-------|---------|
+| Combined person-company pairs | 96,968 |
+| Google search queries | 96,971 |
+| LinkedIn URLs found | ~80,000 |
+| Verified URLs (name matched) | 42,527 |
+| Profiles with posts | 26,367 |
+| Total posts scraped | 2,194,784 |
+
+## Post Scraping — `scrape_posts.py`
+
+Generic LinkedIn post scraper using Apify's `apimaestro/linkedin-batch-profile-posts-scraper` actor.
+
+### Key Features
+
+- **Automatic pagination**: Uses `total_posts` parameter (max 10,000) to get full post history
+- **JSONL append-only checkpoints**: Results written to disk incrementally — no RAM accumulation. RAM usage bounded to one batch (~100 profiles) at a time.
+- **Resume after interruption**: Checkpoint preserves progress on abort (spending limit, SLURM timeout, OOM). Resume with `--resume`.
+- **1000-post cap detection**: Pauses scraping if a profile returns exactly 1000 posts without any profile exceeding 1000 (indicates pagination failure)
+- **Fail-fast**: Aborts after 3 consecutive Apify failures
+- **Metadata carry-through**: Joins company/person metadata to each post via LinkedIn URL
+
+### Usage
 
 ```bash
-cd src/data_collection
-
-# Check status
-python3 scrape_linkedin_posts_sp500.py --status
-
-# Test with one company
-python3 scrape_linkedin_posts_sp500.py --prototype --company "Apple"
-
-# Process batches
-python3 scrape_linkedin_posts_sp500.py --batch 1
-python3 scrape_linkedin_posts_sp500.py --batch all
-
-# Combine results
-python3 scrape_linkedin_posts_sp500.py --combine
+python3 src/data_collection/scrape_posts.py --input urls.csv --stats       # Preview
+python3 src/data_collection/scrape_posts.py --input urls.csv --prototype 5  # Test
+python3 src/data_collection/scrape_posts.py --input urls.csv --run --yes    # Full run
+python3 src/data_collection/scrape_posts.py --input urls.csv --resume       # Resume
+python3 src/data_collection/scrape_posts.py --input urls.csv --slurm        # Generate SLURM script
 ```
 
-**Output:** `data/processed/sp500_linkedin_posts/`
+### Architecture
 
----
+```
+Scraping:  scrape_posts.py → temp_results.jsonl (append-only, low RAM)
+                            → .scrape_checkpoint.json (metadata only)
+                            
+Convert:   convert_temp_results.py → posts_*.csv + profiles_*.csv (high-memory SLURM job)
 
-## Full Workflow (All Companies)
+Merge:     merge_all_batches.py → posts_combined.csv (final dataset)
+```
 
-After validating the S&P 500 pilot, run this workflow for the complete dataset (~176k director records).
+## Sentiment Analysis — Upcoming
 
-### Step 1: Prepare Search Queries
+### Loughran-McDonald Dictionary
+
+The 2024 Master Dictionary (`Loughran-McDonald_MasterDictionary_1993-2024.csv`) is the primary sentiment method. File location: `data/Loughran-McDonald_MasterDictionary_1993-2024.csv`.
+
+Existing pilot scripts (S&P 500 only):
+- `analysisAI_LM.py` — AI post sentiment analysis
+- `covid_sentiment_LM.py` — COVID baseline comparison
+- `lm_dictionary_loader.py` — Dictionary loading helper
+
+### Pilot Results (S&P 500 subset)
+
+| Metric | AI Posts | COVID Posts |
+|--------|----------|-------------|
+| Mean net sentiment | +18.42 | +9.24 |
+| % positive posts | 69.2% | 51.9% |
+
+### Planned Approach
+
+1. **AI keyword filtering** with word-boundary matching (`\b` regex) — avoids substring false positives
+2. **L-M sentiment scoring** as primary method
+3. **FinBERT** as robustness check
+4. **Control groups** (Members of Congress, professional athletes) for platform-level positivity bias
+5. **Aggregation**: post-level → director-level → company-level
+
+## Running on Stanford Sherlock
+
+### Setup
 
 ```bash
-cd src/data_processing
-python3 prepare_linkedin_queries.py
-
-# Or prototype mode
-python3 prepare_linkedin_queries.py --prototype --company "Apple"
+ssh sherlock
+cd ~/ai-enthusiasm-research
+module load python/3.12
+source venv/bin/activate
 ```
 
-### Step 2: Find LinkedIn URLs
+### SLURM Partitions
+
+| Partition | Use |
+|-----------|-----|
+| `nbloom` | Main compute (384GB RAM, 7-day limit) |
+| `normal` | General (128GB RAM, 7-day limit) |
+| `bigmem` | High-memory jobs (384GB+, 1-day limit) |
+
+### Common Commands
 
 ```bash
-cd src/data_collection
-python3 find_linkedin_urls.py --batch 1
-python3 find_linkedin_urls.py --batch all
+squeue -u $USER                    # Job status
+tail -30 "$(ls -t logs/*.log | head -1)"  # Latest log
+scancel <JOB_ID>                   # Cancel job
 ```
 
-### Step 3: Scrape LinkedIn Posts
+## Configuration
+
+### API Credentials (`.env`)
 
 ```bash
-cd src/data_collection
-python3 scrape_linkedin_posts.py --batch 1
-python3 scrape_linkedin_posts.py --batch all
+GOOGLE_API_KEY=your_api_key_here
+GOOGLE_CSE_ID=your_search_engine_id_here
+APIFY_API_TOKEN=your_apify_token_here
 ```
 
----
+## Cost Summary
 
-## API Limits & Costs
+| Service | Cost | Status |
+|---------|------|--------|
+| Google Custom Search API | ~$485 | Complete |
+| Apify LinkedIn scraper | ~$5,500 | Complete |
+| WRDS | Free (Stanford) | Complete |
+| Sherlock compute | Free (Stanford) | In use |
+| **Total** | **~$6,000** | |
 
-| Service | Free Tier | Paid Rate |
-|---------|-----------|-----------|
-| Google Custom Search | 100 queries/day | $5 per 1,000 queries |
-| Apify | $5 free credit | ~$5 per 1,000 profiles |
+## Acknowledgments
 
-### Cost Comparison
-
-| Workflow | Directors | Google Cost | Apify Cost | Total |
-|----------|-----------|-------------|------------|-------|
-| **S&P 500 Pilot** | 9,423 | ~$47 | ~$40 | **~$87** |
-| **Full Dataset** | 176,758 | ~$880 | ~$750 | **~$1,630** |
-
----
-
-## Output Files
-
-### Posts CSV (`*_posts_*.csv`)
-
-The main output for analysis:
-
-| Column | Description |
-|--------|-------------|
-| `profile_url` | LinkedIn profile URL |
-| `profile_name` | Director's name |
-| `post_url` | URL of the post |
-| `post_date` | When the post was made |
-| `post_text` | Full text content of the post |
-| `likes` | Number of likes |
-| `comments` | Number of comments |
-| `reposts` | Number of reposts |
-| `post_type` | Type of post |
-
-### URL Mapping (`*_urls.csv`)
-
-Links directors to their LinkedIn profiles:
-
-| Column | Description |
-|--------|-------------|
-| `gvkey` | Company identifier |
-| `ticker` | Stock ticker |
-| `company_name_clean` | Company name |
-| `director_name_clean` | Cleaned name |
-| `search_query` | Query used for Google search |
-| `linkedin_url` | Found LinkedIn URL (or empty) |
-| `linkedin_title` | Google result title (for verification) |
-| `search_status` | found / not_found / error |
-
----
-
-## Checkpointing & Resume
-
-### S&P 500 Workflow
-
-Progress is saved to `data/processed/sp500_checkpoints/`:
-- `batch_001_checkpoint.csv` - Partial results for in-progress batch
-- `batch_001_progress.json` - Last processed index
-- `completed_batches.txt` - List of completed batches
-
-**To check progress:**
-```bash
-python3 find_linkedin_urls_sp500.py --status
-```
-
-**To resume after interruption:**
-```bash
-# Just run the same command - it auto-resumes
-python3 find_linkedin_urls_sp500.py --batch 1
-```
-
-**To restart a batch from scratch:**
-```bash
-python3 find_linkedin_urls_sp500.py --batch 1 --no-resume
-```
-
-### Original Workflow
-
-Progress is saved to `data/processed/checkpoints/`:
-- `completed_batches.txt` - Completed URL search batches
-- `scraping_progress.csv` - Completed post scraping batches
-
----
-
-## Troubleshooting
-
-### WRDS Connection Issues (Step 0)
-- Ensure `~/.pgpass` is configured with correct credentials
-- Check file permissions: `chmod 600 ~/.pgpass`
-- Test connection: `python3 -c "import wrds; db = wrds.Connection(); print('Connected!')"`
-
-### "S&P 500 data not found"
-- Run Step 0 first: `python3 src/data_collection/build_sp500_directors.py`
-- Check that `data/sp500/sp500_current_directors.csv` exists
-
-### "No batch files found"
-- Run Step 1 first: `python3 src/data_processing/prepare_linkedin_queries_sp500.py`
-- Check that `outputs/sp500_batches/` contains CSV files
-
-### "No LinkedIn URLs found"
-- Check your Google Custom Search Engine is configured for `linkedin.com`
-- Test API in browser: `https://www.googleapis.com/customsearch/v1?key=YOUR_KEY&cx=YOUR_CX&q=test`
-- The director may not have a LinkedIn profile
-
-### "API quota exceeded"
-- Google: Wait until tomorrow (resets daily) or enable billing
-- Apify: Add credits to your account
-- The S&P 500 scripts save checkpoints, so just re-run to continue
-
-### "No posts retrieved"
-- The profile may have no public posts
-- LinkedIn may have blocked the scraper temporarily
-
----
-
-## Alternative Apify Actors
-
-If `apimaestro/linkedin-profile-post-scraper` doesn't work, try:
-- `anchor/linkedin-profile-scraper`
-- `bebity/linkedin-profile-scraper`
-- `harvest/linkedin-posts-scraper`
-
-Update `ACTOR_POST_SCRAPER` in `scrape_linkedin_posts_sp500.py`.
-
----
-
-## Data Sources (WRDS)
-
-| WRDS Table | Purpose |
-|------------|---------|
-| `crsp.msp500list` | Monthly S&P 500 constituents (PERMNO, dates) |
-| `crsp.ccmxpf_linktable` | Links CRSP PERMNO to Compustat GVKEY |
-| `execcomp.directorcomp` | Director names and company info |
-
-**Note:** CRSP S&P 500 data is updated periodically. If requesting future dates, the script automatically falls back to the most recent available data.
+- WRDS (Wharton Research Data Services) for corporate governance data
+- Schwartz-Ziv and Volkova for the blockholder dataset
+- Google Custom Search API for LinkedIn profile discovery
+- Apify for LinkedIn post scraping infrastructure
+- Stanford Research Computing (Sherlock cluster)
+- Nick Bloom and John Van Reenen for project supervision and funding

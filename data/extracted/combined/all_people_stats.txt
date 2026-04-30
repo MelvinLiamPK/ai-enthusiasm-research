@@ -1,0 +1,22 @@
+Combined People Dataset — Summary Statistics
+==================================================
+
+Generated: 2026-02-14 14:22
+
+Input:
+  Directors:    45,441
+  Executives:   36,100
+  Blockholders: 19,318
+  Total input:  100,859
+
+Output:
+  Deduplicated rows:  96,968
+  Unique people:      71,171
+  Unique companies:   11,533
+
+Source combinations:
+  director                             41,591
+  executive                            32,260
+  blockholder                          19,289
+  director|executive                    3,827
+  blockholder|director|executive            1
