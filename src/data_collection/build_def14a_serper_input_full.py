@@ -1,8 +1,12 @@
 """
-Build Serper input CSV for unmatched directors using DEF 14A primary employment.
+Build Serper input CSV for ALL directors using DEF 14A primary employment.
 
-Matches extracted DEF 14A bios to tracked persons, then creates input for
-Serper re-search on unmatched directors using primary_company as anchor.
+For each director in def14a_extracted_bios.csv, uses primary_company as the
+Serper search anchor (falls back to board ticker if primary_company is missing).
+Deduplicates by (full_name, ticker) to avoid redundant searches for the same
+person at the same company across multiple filing years.
+
+Workflow: WRDS names -> DEF 14A primary role -> Serper -> Revelio -> Apify
 
 Usage:
     python3 src/data_collection/build_def14a_serper_input_full.py
@@ -10,97 +14,62 @@ Usage:
 
 import pandas as pd
 from pathlib import Path
-import difflib
+import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 BIOS_PATH = PROJECT_ROOT / "data" / "processed" / "def14a_extracted_bios.csv"
-PEOPLE_PATH = PROJECT_ROOT / "data" / "extracted" / "combined" / "all_people.csv"
-OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "def14a_serper_input_unmatched.csv"
-
-
-def fuzzy_match_name(bio_name, person_names, threshold=0.85):
-    """Find best matching person by name. Return (person_id, match_score) or (None, 0)."""
-    if not bio_name or not isinstance(bio_name, str):
-        return None, 0
-
-    bio_name_lower = bio_name.lower().strip()
-    best_match = None
-    best_score = 0
-
-    for person_id, pname in person_names.items():
-        if not isinstance(pname, str):
-            continue
-        pname_lower = pname.lower().strip()
-        score = difflib.SequenceMatcher(None, bio_name_lower, pname_lower).ratio()
-        if score > best_score:
-            best_score = score
-            best_match = person_id
-
-    if best_score >= threshold:
-        return best_match, best_score
-    return None, 0
+OUTPUT_PATH = PROJECT_ROOT / "data" / "processed" / "def14a_serper_input_all_directors.csv"
 
 
 def main():
-    print("Building DEF 14A Serper input for unmatched directors...")
+    print("Building DEF 14A Serper input for ALL directors...")
 
     if not BIOS_PATH.exists():
         print(f"ERROR: {BIOS_PATH} not found. Run parse_def14a_bios.py first.")
         return 1
 
-    if not PEOPLE_PATH.exists():
-        print(f"ERROR: {PEOPLE_PATH} not found.")
-        return 1
-
-    # Load data
     bios_df = pd.read_csv(BIOS_PATH)
-    people_df = pd.read_csv(PEOPLE_PATH)
-
     print(f"  Loaded {len(bios_df):,} extracted bios")
-    print(f"  Loaded {len(people_df):,} tracked persons")
 
-    # Create name lookup from people
-    person_names = dict(zip(people_df["person_id"], people_df["name"]))
-
-    # Filter bios for directors only (exclude other roles)
+    # Filter to directors only
     bios_df = bios_df[bios_df["role_context"] == "director"].copy()
-    print(f"  Filtered to {len(bios_df):,} directors")
+    print(f"  Filtered to {len(bios_df):,} director bios")
 
-    # Match bios to persons
-    matches = []
-    for _, bio in bios_df.iterrows():
-        person_id, score = fuzzy_match_name(bio["full_name"], person_names)
-        matches.append({"bio_idx": _, "person_id": person_id, "match_score": score})
+    # Drop rows with no name
+    bios_df = bios_df[bios_df["full_name"].notna()].copy()
 
-    bios_df["person_id"] = [m["person_id"] for m in matches]
-    bios_df["match_score"] = [m["match_score"] for m in matches]
+    # Build Serper input
+    serper_input = bios_df[["ticker", "full_name", "primary_company", "primary_role", "is_current"]].copy()
+    serper_input.columns = ["board_ticker", "person_name", "primary_company", "role", "is_current"]
 
-    # Filter for unmatched (no person_id found)
-    unmatched = bios_df[bios_df["person_id"].isna()].copy()
-    print(f"  Found {len(unmatched):,} unmatched directors")
+    # Use primary_company as anchor; fall back to board_ticker if missing
+    serper_input["company"] = serper_input["primary_company"].fillna(serper_input["board_ticker"])
+    serper_input["match_source"] = serper_input["primary_company"].notna().map(
+        {True: "def14a_primary", False: "board_ticker_fallback"}
+    )
 
-    # Build Serper input: use primary_company, fall back to ticker if missing
-    serper_input = unmatched[[
-        "ticker", "full_name", "primary_company", "primary_role", "is_current"
-    ]].copy()
-    serper_input.columns = ["board_ticker", "person_name", "company", "role", "is_current"]
-
-    # If primary_company is null, use board_company (ticker) as fallback
-    serper_input["company"] = serper_input["company"].fillna(serper_input["board_ticker"])
-
-    # Remove rows with null company
+    # Remove rows with no company at all
+    before_company_filter = len(serper_input)
     serper_input = serper_input[serper_input["company"].notna()].copy()
+    if before_company_filter != len(serper_input):
+        print(f"  Dropped {before_company_filter - len(serper_input):,} rows with no company")
 
-    # Add metadata
-    serper_input["match_source"] = "def14a_primary"
+    # Deduplicate by (person_name, board_ticker) — same person at same company across years
+    before_dedup = len(serper_input)
+    serper_input = serper_input.drop_duplicates(subset=["person_name", "board_ticker"]).copy()
+    print(f"  Deduplicated: {before_dedup:,} -> {len(serper_input):,} unique (person, board) pairs")
+
     serper_input = serper_input[["person_name", "company", "board_ticker", "role", "is_current", "match_source"]]
-
     serper_input.to_csv(OUTPUT_PATH, index=False)
 
+    n_primary = (serper_input["match_source"] == "def14a_primary").sum()
+    n_fallback = (serper_input["match_source"] == "board_ticker_fallback").sum()
+
     print(f"\nOutput: {OUTPUT_PATH}")
-    print(f"  Rows: {len(serper_input):,}")
-    print(f"  With primary_company: {(serper_input['company'] != serper_input['board_ticker']).sum():,}")
+    print(f"  Total rows: {len(serper_input):,}")
+    print(f"  With primary_company anchor: {n_primary:,} ({100*n_primary/len(serper_input):.1f}%)")
+    print(f"  With board_ticker fallback: {n_fallback:,} ({100*n_fallback/len(serper_input):.1f}%)")
     print(f"\nNext step:")
     print(f"  python3 src/data_collection/find_urls_serper.py \\")
     print(f"    --input {OUTPUT_PATH} \\")
@@ -110,5 +79,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import sys
     sys.exit(main())
