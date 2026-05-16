@@ -39,6 +39,9 @@ def main():
     # Drop rows with no name
     bios_df = bios_df[bios_df["full_name"].notna()].copy()
 
+    # Sort by year (descending) to keep most recent filing when deduplicating
+    bios_df = bios_df.sort_values("year", ascending=False)
+
     # Build Serper input
     serper_input = bios_df[["ticker", "full_name", "primary_company", "primary_role", "is_current"]].copy()
     serper_input.columns = ["board_ticker", "person_name", "primary_company", "role", "is_current"]
