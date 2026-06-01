@@ -1,0 +1,28 @@
+{
+  "release": "2026-05-27",
+  "built": "2026-05-31",
+  "code_git_sha": "4f155f9238f2d12d84b006737651f3a76f198cf5",
+  "corpus_vintage": "2026-05-27 (posts corpus frozen; pre-Apify-expansion)",
+  "description": "First blessed canonical release. Stable-named symlinks to the trusted dated source files. The def14a director metadata is PRESENT as inputs but NOT yet joined into the firm/person panels — that join is the deferred 2026-05-31_def14a release.",
+  "notes": [
+    "Entries are SYMLINKS to immutable dated source files (no duplication; disk is tight). The targets must not be deleted or overwritten.",
+    "Formats kept as CSV per project decision; .dta panels included as-is (Stata artifacts).",
+    "Zero-imputation of AI sentiment is a REGRESSION-TIME transform, not baked here — these files keep true missingness (NaN).",
+    "Sherlock: place data/canonical/ on $SCRATCH (like outputs/) since posts_full_coverage + posts_scored_unique are GB-scale."
+  ],
+  "files": {
+    "company_sentiment_annual.csv":   {"source": "outputs/sentiment_results/company_sentiment_annual_20260527_164007.csv",   "rows": 54466,   "role": "primary input — firm-year sentiment (Python regressions read this)"},
+    "company_sentiment_quarterly.csv":{"source": "outputs/sentiment_results/company_sentiment_quarterly_20260527_164007.csv","rows": 156517,  "role": "primary input — firm-quarter sentiment"},
+    "posts_scored_unique.csv":        {"source": "outputs/sentiment_results/sentiment_posts_scored_unique_20260527.csv",       "rows": 2297293, "role": "post-level scored (one row per unique post); person-level aggregation source"},
+    "posts_full_coverage.csv":        {"source": "outputs/sentiment_results/sentiment_all_posts_full_coverage_20260527.csv",   "rows": 2922365, "role": "expanded post x person x company, 100% LM-scored; person-attr + firm-year metric source"},
+    "def14a_director_status.csv":     {"source": "data/processed/def14a_director_status_20260528.csv",                          "rows": 96955,   "role": "INPUT, not yet joined — incumbent/nominee/mid-year status per (cik,year,full_name). No age column in this run.", "filing_vintage": "2026-05-28 classification over 9588 filings"},
+    "def14a_director_tenure.csv":     {"source": "data/processed/def14a_director_tenure_panel_20260528.csv",                    "rows": 224429,  "role": "INPUT, not yet joined — director x firm x year tenure windows for attribution gating"},
+    "revelio_validation_summary.csv": {"source": "data/revelio/revelio_validation_summary_v2.csv",                             "rows": 102324,  "role": "input — Revelio strong_match flags per (profile, board)"},
+    "funda_annual.csv":               {"source": "data/extracted/compustat/funda_20260425_135322.csv",                         "role": "input — Compustat fundamentals (tobins_q, roa, sales_growth, ln_at, leverage, rnd_int, etc.)", "pull_vintage": "2026-04-25"},
+    "crsp_annual_returns.csv":        {"source": "data/extracted/crsp/crsp_annual_returns_20260428_132604.csv",                 "role": "input — CRSP annual stock returns", "pull_vintage": "2026-04-28"},
+    "firm_panel_annual.dta":          {"source": "outputs/stata_handoff_20260527/data/firm_panel.dta",      "role": "built panel — firm x year, regression-ready (sentiment + funda + CRSP t/t+1)"},
+    "firm_panel_quarterly.dta":       {"source": "outputs/stata_handoff_20260527/data/firm_quarterly.dta",  "role": "built panel — firm x quarter"},
+    "person_year.dta":                {"source": "outputs/stata_handoff_20260527/data/person_year.dta",     "role": "built panel — person x year"},
+    "person_lifetime.dta":            {"source": "outputs/stata_handoff_20260527/data/person_lifetime.dta", "role": "built panel — person lifetime aggregate"}
+  }
+}

@@ -61,6 +61,12 @@ FUNDA_DIR     = PROJECT_ROOT / "data" / "extracted" / "compustat"
 CRSP_DIR      = PROJECT_ROOT / "data" / "extracted" / "crsp"
 OUTPUT_BASE   = PROJECT_ROOT / "outputs" / "sanity_checks"
 
+# Source of truth: stable-named files under the active canonical release.
+# Defaults read from here so results don't silently shift when a stray dated
+# file appears. Override with --sentiment/--funda/--crsp; fall back to the old
+# "newest dated file" auto-detect only if the canonical file is absent.
+CANONICAL = PROJECT_ROOT / "data" / "canonical" / "current"
+
 
 # ──────────────────────────────────────────────
 # I/O helpers
@@ -590,7 +596,9 @@ DEFAULT_REGRESSORS_BY_OUTCOME = {
 
 ALL_REGRESSORS = ["ai_mean_net_sentiment", "ai_post_share",
                   "mean_net_sentiment", "engagement_wtd_sentiment",
-                  "role_wtd_sentiment"]
+                  "role_wtd_sentiment",
+                  "mean_of_mean_net_sentiment", "mean_of_sum_net_sentiment",
+                  "ai_mean_of_mean_net_sentiment", "ai_mean_of_sum_net_sentiment"]
 
 
 def main():
@@ -631,6 +639,9 @@ def main():
     parser.add_argument("--min-strong-match-share", type=float, default=0.5,
                         help="With --strong-match-only, drop firm-years below this "
                              "share of strong-match posts (default: 0.5).")
+    parser.add_argument("--no-md-update", action="store_true",
+                        help="Skip auto-updating sentiment_diagnostics.md "
+                             "(useful for sensitivity / comparison runs).")
     args = parser.parse_args()
 
     if not args.regressor:
@@ -638,14 +649,21 @@ def main():
 
     if args.sentiment:
         sent_path = Path(args.sentiment)
+    elif (CANONICAL / "company_sentiment_annual.csv").exists():
+        sent_path = CANONICAL / "company_sentiment_annual.csv"
     else:
-        # Pick the latest *full* annual aggregate, not the *_ai_only_* variant
-        # (where ai_post_share is constant 1.0 by construction).
+        # Fallback: latest *full* annual aggregate (not the *_ai_only_* variant,
+        # where ai_post_share is constant 1.0 by construction).
         candidates = sorted(p for p in SENTIMENT_DIR.glob("company_sentiment_annual_*.csv")
                             if "_ai_only_" not in p.name)
         sent_path = candidates[-1] if candidates else None
-    funda_path = Path(args.funda) if args.funda else latest(
-        "funda_*.csv", FUNDA_DIR)
+
+    if args.funda:
+        funda_path = Path(args.funda)
+    elif (CANONICAL / "funda_annual.csv").exists():
+        funda_path = CANONICAL / "funda_annual.csv"
+    else:
+        funda_path = latest("funda_*.csv", FUNDA_DIR)
 
     if sent_path is None or not sent_path.exists():
         sys.exit(f"[error] No company_sentiment_annual_*.csv found in {SENTIMENT_DIR}\n"
@@ -666,8 +684,12 @@ def main():
 
     # If we're regressing stock returns, merge in the CRSP file
     if args.outcome == "stock_return":
-        crsp_path = Path(args.crsp) if args.crsp else latest(
-            "crsp_annual_returns_*.csv", CRSP_DIR)
+        if args.crsp:
+            crsp_path = Path(args.crsp)
+        elif (CANONICAL / "crsp_annual_returns.csv").exists():
+            crsp_path = CANONICAL / "crsp_annual_returns.csv"
+        else:
+            crsp_path = latest("crsp_annual_returns_*.csv", CRSP_DIR)
         if crsp_path is None or not crsp_path.exists():
             sys.exit(f"[error] --outcome stock_return requires a CRSP file in "
                      f"{CRSP_DIR}\n        Run: python3 src/data_extraction/build_crsp_returns.py "
@@ -782,12 +804,15 @@ def main():
         "min_ai_posts":    args.min_ai_posts if needs_ai_floor else None,
         "lead":            args.lead,
     }
-    md_block = render_md_table(results, run_meta)
-    if args.strong_match_only:
-        sample_kind = "strong_fuzzy" if args.strong_match_variant == "fuzzy" else "strong"
+    if not args.no_md_update:
+        md_block = render_md_table(results, run_meta)
+        if args.strong_match_only:
+            sample_kind = "strong_fuzzy" if args.strong_match_variant == "fuzzy" else "strong"
+        else:
+            sample_kind = "full"
+        update_diagnostics_md(md_block, args.outcome, sample_kind)
     else:
-        sample_kind = "full"
-    update_diagnostics_md(md_block, args.outcome, sample_kind)
+        print("[skip] --no-md-update: markdown not updated.")
 
     # Quarterly robustness if file exists
     q_path = latest("company_sentiment_quarterly_*.csv", SENTIMENT_DIR)
