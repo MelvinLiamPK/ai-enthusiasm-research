@@ -3,6 +3,34 @@
 Running log of decisions and planned next steps. Permanent home for things that
 would otherwise get lost in chat history.
 
+## TASK (added 2026-06-02) — S&P 1500 name / ownership-change list
+
+Build a per-firm **alias set** for S&P 1500 firms (name + ownership-structure
+changes over 2010–2025) to fix the "Sundar Pichai work-history problem"
+(Compustat says ALPHABET INC, LinkedIn says Google → strong-match fails).
+
+**Authoritative online sources (don't hand-compile):**
+1. **SEC EDGAR `formerNames`** — the company-submissions JSON
+   (`data.sec.gov/submissions/CIK##########.json`) lists former names with dates,
+   per CIK. Free, authoritative for legal name changes.
+2. **CRSP `stocknames` / `dsenames`** — full name + ticker history with date
+   ranges per PERMNO (gold standard; catches Google Inc → Alphabet Inc, ticker
+   changes, etc.).
+3. **Compustat** `conm`/`conml` + names history; `dlrsn` for merger/deletion events.
+4. **LLM brand-alias layer** (existing Section 4 / Chat 2) — brand/subsidiary
+   names that aren't legal-name changes (ALPHABET → Google, YouTube …).
+
+Per firm: alias_set = {current legal name} ∪ {all former names (EDGAR/CRSP)} ∪
+{brand/subsidiary names (LLM)}.
+
+**Matching philosophy: COMPREHENSIVE but LENIENT (high recall) — owner's call
+2026-06-02.** A LinkedIn-stated company matches the firm if it hits **any** alias,
+**regardless of date** (NOT time-gated). Example: Sundar still lists "Google" →
+match to Alphabet even though the legal name changed in 2015. This resolves the
+prior Section 4 open question "should aliases be time-aware?" → **no**, prioritize
+avoiding false negatives (dropping real matches like Pichai) over false positives.
+Merge all sources into one `company_aliases.csv`.
+
 ## Decisions made today
 
 1. **Zero-imputation lives at regression time, not in the data.** AI sentiment
@@ -55,3 +83,13 @@ would need to be **re-run** afterward. So:
 expansion (how many new primary-employer-anchored searches), and what's the
 Apify budget? Determines whether a single re-scoring pass is cheap or needs
 batching.
+
+**Update 2026-06-02 — expansion grows the instrument's power.**
+The def14a never-elected placebo is empty, so the surviving identification angle
+is new-nominees' pre-board sentiment (exogenous to the *joined* firm). Of 1,332
+new-nominees only 345 (26%) currently have posts — the rest are just not-yet-scraped
+— so the Apify expansion raises N/power for this instrument. (Note: "already an
+incumbent elsewhere," true of most of the 345, is NOT a contamination — exogeneity
+is firm-specific, and those people conveniently have a pre-join posting history.
+The real threat is endogenous director-firm matching, handled by timing + controls.)
+Tenure-gated attribution correctness is available now on existing posts regardless.

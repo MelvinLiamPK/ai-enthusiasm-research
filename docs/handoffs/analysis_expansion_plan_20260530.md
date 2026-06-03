@@ -158,6 +158,22 @@ The planner should design a panel builder that:
 - Produces firm × period panels at **annual, quarterly, and monthly** grain
   from `sentiment_all_posts_full_coverage_20260527.csv` (post timestamps) joined
   to the right-frequency outcome series.
+- **Tenure-gated attribution (corpus-wide correctness fix).** Build a canonical
+  `tenure_panel.csv` keyed `(profile_url, ticker)` → `[tenure_start, tenure_end,
+  tenure_source]` by **unioning two sources**:
+  1. **WRDS** annual panels (`data/extracted/{directors,executives,blockholders}/*_all.csv`,
+     person × firm × year, 2010–2025): map name+company → `profile_url` via
+     `all_linkedin_urls`; collapse to (profile_url, ticker) → [min_year, max_year].
+  2. **def14a** `def14a_director_tenure.csv`: already (profile_url, ticker, year)
+     with `director_since` backfill.
+  Merge per (profile_url, ticker): `tenure_start = min(WRDS_min, def14a_start)`,
+  `tenure_end = max(WRDS_max, def14a_end)`, `tenure_source ∈
+  {wrds_only, def14a_only, both}`. **def14a is the SOLE tenure source for the ~5,647
+  directors (30%) not in WRDS** — not a refinement; without it their posts can't be
+  gated. Then count a post `(profile_url, ticker, year)` toward a (firm, period)
+  **only if the year ∈ the merged tenure window**. Covers all roles/all ~26k
+  profiles. (The combined `all_people.csv` dropped `year` in dedup — that's why
+  this wasn't happening; rebuild from the `*_all.csv` files + def14a.)
 - Aligns **calendar** (post timestamps) to **fiscal** (Compustat) periods —
   define and document the mapping rule (which fiscal period a post falls in
   given each firm's fiscal-year-end; don't assume December).
@@ -237,11 +253,11 @@ Descriptive stats of AI sentiment, broken out by:
 - **R&D intensity** — *already done* by John (`binscatter av_senti lrnd_int`,
   with `log(rnd_int)` and the "lots of zeroes" handled). Include for
   completeness; don't redo unless extending.
-- **Age and gender** — age from the DEF 14A extraction (owned by the director-
-  status chat; consume once available; the "over age 30?" note reads as a
-  sanity-check threshold on extracted age). Gender via name-inference — the
-  planner should propose a method (e.g. a name→gender library) and flag its
-  accuracy limits.
+- **Age and gender** — age from the DEF 14A bios (backfill from `def14a_bio_text`;
+  the "over age 30?" note reads as a sanity-check threshold). **Gender for
+  executives is already in `data/extracted/executives/executives_all.csv`
+  (`gender` column)** — use it directly; only fall back to name-inference for
+  directors/blockholders, flagging accuracy limits.
 
 **Verification:** a descriptives table/notebook that reproduces John's
 "large firms and R&D-intensive firms are more AI-positive" finding and extends
