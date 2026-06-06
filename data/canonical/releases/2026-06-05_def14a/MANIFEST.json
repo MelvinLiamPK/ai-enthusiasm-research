@@ -1,0 +1,110 @@
+{
+  "release": "2026-06-05_def14a",
+  "build_date": "2026-06-05",
+  "git_sha": "5d3f958cd5ac6408f88a47354a6d3889230222fe",
+  "current_symlink_flipped": false,
+  "base_release": "2026-05-27",
+  "what_changed": "Merged DEF 14A director classification into the panels (posts we already have). Added director AGE (HTML table-parse \u222a bio regex = 78.8% at $0, then targeted Haiku 4.5 pass on the residual = 95.5% for $48; no re-scrape); new-nominee/tenure table per (profile_url,ticker); firm-year board-composition features on firm_panel; person enrichment (def14a status, tenure, pre_board_year, is_established_elsewhere). OUT OF SCOPE / deferred to Wave 4: 8-K, tenure-gating of sentiment, WRDS\u222adef14a tenure union. `current` NOT flipped \u2014 owner reviews.",
+  "files": {
+    "company_sentiment_annual.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/company_sentiment_annual_20260527_164007.csv"
+    },
+    "company_sentiment_quarterly.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/company_sentiment_quarterly_20260527_164007.csv"
+    },
+    "crsp_annual_returns.csv": {
+      "rows": null,
+      "source": "../../../extracted/crsp/crsp_annual_returns_20260428_132604.csv"
+    },
+    "def14a_board_composition.csv": {
+      "rows": 9554,
+      "source": "../../../processed/def14a_board_composition_20260605.csv"
+    },
+    "def14a_corpus_intersection.csv": {
+      "rows": 48316,
+      "source": "../../../processed/def14a_corpus_intersection_20260605.csv"
+    },
+    "def14a_director_status.csv": {
+      "rows": 96955,
+      "source": "../../../processed/def14a_director_status_age_20260605.csv"
+    },
+    "def14a_director_tenure.csv": {
+      "rows": null,
+      "source": "../../../processed/def14a_director_tenure_panel_20260528.csv"
+    },
+    "def14a_new_nominee_tenure.csv": {
+      "rows": 24410,
+      "source": "../../../processed/def14a_new_nominee_tenure_20260605.csv"
+    },
+    "firm_panel_annual.dta": {
+      "rows": 19858,
+      "source": "(written in place)"
+    },
+    "firm_panel_quarterly.dta": {
+      "rows": null,
+      "source": "../../../../outputs/stata_handoff_20260527/data/firm_quarterly.dta"
+    },
+    "funda_annual.csv": {
+      "rows": null,
+      "source": "../../../extracted/compustat/funda_20260425_135322.csv"
+    },
+    "person_lifetime.dta": {
+      "rows": 26511,
+      "source": "(written in place)"
+    },
+    "person_year.dta": {
+      "rows": 143850,
+      "source": "(written in place)"
+    },
+    "posts_full_coverage.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/sentiment_all_posts_full_coverage_20260527.csv"
+    },
+    "posts_scored_unique.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/sentiment_posts_scored_unique_20260527.csv"
+    },
+    "revelio_validation_summary.csv": {
+      "rows": null,
+      "source": "../../../revelio/revelio_validation_summary_v2.csv"
+    }
+  },
+  "key_metrics": {
+    "age_coverage_pct": 95.5,
+    "age_rows_backfilled": 88501,
+    "new_nominee_pairs": 1423,
+    "new_nominee_with_profile_url": 811,
+    "board_comp_tickers_no_gvkey": 0,
+    "board_comp_gvkey_year_not_in_firm_panel": 1982,
+    "firm_panel_rows_with_board_comp": 7572,
+    "person_year_pre_board_rows": 3978
+  },
+  "age_method": {
+    "deterministic_pct": 78.8,
+    "final_pct": 95.5,
+    "llm_cost_usd": 48.44,
+    "llm_model": "claude-haiku-4-5",
+    "source_mix": {
+      "table": 59668,
+      "llm": 15491,
+      "regex": 12916,
+      "table_disagree_regex": 426
+    },
+    "llm_validation": "96.3% exact / 99.3% within\u00b11yr on year-delta consistency"
+  },
+  "augmented_2026-06-06": {
+    "git_sha": "5d3f958cd5ac6408f88a47354a6d3889230222fe",
+    "added": {
+      "def14a_director_attributes.csv": {
+        "rows": 92632,
+        "cols": "gender, gender_source, board_leadership_role, independent, n_committees, committees, committee_chair, audit_financial_expert, n_other_public_directorships",
+        "coverage": "gender 91% (99.8% vs Execucomp); leadership 23%; committees/independence bio-only ~10-22% (table-bound, LLM-liftable)"
+      },
+      "new_nominee_tenure +cols": "gender, board_leadership_role, primary_company",
+      "person_year/person_lifetime +cols": "def14a_gender, def14a_primary_company"
+    },
+    "primary_company_source": "Recovered from revelio_validation_rows_v2.csv (the full-scale DEF14A primary-employer extraction, embedded in the URL/Revelio datasets); ticker-fallback rows dropped. primary_TITLE not available at scale."
+  }
+}
