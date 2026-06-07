@@ -1,0 +1,95 @@
+{
+  "release": "2026-06-07_crsp_monthly",
+  "build_date": "2026-06-07",
+  "git_sha": "c4345bbc73bd0f8bb672412d14fcfc3f8d8774f1",
+  "current_symlink_flipped": false,
+  "base_release": "2026-06-05_def14a",
+  "what_changed": "Flippable snapshot = the full 2026-06-05_def14a fileset (symlink-inherited; def14a itself inherits 2026-05-27) PLUS a new calendar-month CRSP returns panel and a re-emitted annual returns file. crsp_monthly_returns.csv: one row per (gvkey,month) -- gvkey, permno, date(month-end), year, month, ret, retx, prc, shrout, me=|prc|*shrout ($000s); built from crsp.msf (legacy SIZ), gvkey<->permno via crsp.ccmxpf_lnkhist (LU/LC, P/C) with link-window filter, dedupe to one permno per (gvkey,month) preferring linkprim='P'. crsp_annual_returns.csv REPLACES the broken inherited symlink (the 2026-04-28 build wrote the Series name 'ret' into the permno column); re-emitted with the real permno -- returns are byte-identical, only permno changed. Calendar months only -- no fiscal mapping (downstream builder does calendar->fiscal). `current` NOT flipped.",
+  "inheritance": "All files except crsp_monthly_returns.csv and crsp_annual_returns.csv are symlink-inherited unchanged from 2026-06-05_def14a (which symlink-inherits 2026-05-27). See that release's MANIFEST for their build provenance, key_metrics, age_method, and the 2026-06-06 augmentation (def14a_director_attributes, gender/primary_company).",
+  "crsp_source_table": "crsp.msf (legacy SIZ monthly file); links from crsp.ccmxpf_lnkhist; gvkey universe from data/extracted/combined/all_people.csv; pull 2010-2025 (one leading year => 2009 start); msf data ends 2024-12 on this WRDS instance.",
+  "files": {
+    "CODEBOOK.md": {
+      "source": "../2026-06-05_def14a/CODEBOOK.md (inherited)"
+    },
+    "company_sentiment_annual.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/company_sentiment_annual_20260527_164007.csv"
+    },
+    "company_sentiment_quarterly.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/company_sentiment_quarterly_20260527_164007.csv"
+    },
+    "crsp_annual_returns.csv": {
+      "rows": 29667,
+      "distinct_gvkey": 2715,
+      "fyear_range": "2010 to 2025",
+      "note": "Re-emitted with permno bug fixed (was 'ret' in the 2026-04-28 build); returns byte-identical, only permno changed. Replaces the broken inherited symlink.",
+      "source": "../../../extracted/crsp/crsp_annual_returns_20260607_150439.csv"
+    },
+    "crsp_monthly_returns.csv": {
+      "rows": 387652,
+      "distinct_gvkey": 2739,
+      "distinct_permno": 2823,
+      "date_range": "2009-01 to 2024-12",
+      "one_row_per": "(gvkey, month)",
+      "note": "NEW in this release. Calendar-month panel + market-equity for Chat 3's sub-annual / size-weighting specs.",
+      "source": "../../../extracted/crsp/crsp_monthly_returns_20260607_150204.csv"
+    },
+    "def14a_board_composition.csv": {
+      "rows": 9554,
+      "source": "../../../processed/def14a_board_composition_20260605.csv"
+    },
+    "def14a_corpus_intersection.csv": {
+      "rows": 48316,
+      "source": "../../../processed/def14a_corpus_intersection_20260605.csv"
+    },
+    "def14a_director_attributes.csv": {
+      "rows": 92632,
+      "source": "../../../processed/def14a_director_attributes_20260606.csv"
+    },
+    "def14a_director_status.csv": {
+      "rows": 96955,
+      "source": "../../../processed/def14a_director_status_age_20260605.csv"
+    },
+    "def14a_director_tenure.csv": {
+      "rows": null,
+      "source": "../../../processed/def14a_director_tenure_panel_20260528.csv"
+    },
+    "def14a_new_nominee_tenure.csv": {
+      "rows": 24410,
+      "source": "../../../processed/def14a_new_nominee_tenure_20260605.csv"
+    },
+    "firm_panel_annual.dta": {
+      "rows": 19858,
+      "source": "../2026-06-05_def14a/firm_panel_annual.dta (inherited, written in place there)"
+    },
+    "firm_panel_quarterly.dta": {
+      "rows": null,
+      "source": "../../../../outputs/stata_handoff_20260527/data/firm_quarterly.dta"
+    },
+    "funda_annual.csv": {
+      "rows": null,
+      "source": "../../../extracted/compustat/funda_20260425_135322.csv"
+    },
+    "person_lifetime.dta": {
+      "rows": 26511,
+      "source": "../2026-06-05_def14a/person_lifetime.dta (inherited, written in place there)"
+    },
+    "person_year.dta": {
+      "rows": 143850,
+      "source": "../2026-06-05_def14a/person_year.dta (inherited, written in place there)"
+    },
+    "posts_full_coverage.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/sentiment_all_posts_full_coverage_20260527.csv"
+    },
+    "posts_scored_unique.csv": {
+      "rows": null,
+      "source": "../../../../outputs/sentiment_results/sentiment_posts_scored_unique_20260527.csv"
+    },
+    "revelio_validation_summary.csv": {
+      "rows": null,
+      "source": "../../../revelio/revelio_validation_summary_v2.csv"
+    }
+  }
+}
