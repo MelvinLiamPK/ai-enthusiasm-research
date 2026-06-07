@@ -151,7 +151,12 @@ def get_gvkey_permno_links(db, gvkeys: list[str]) -> pd.DataFrame:
 
 def get_monthly_returns(db, permnos: list[int],
                         start_year: int, end_year: int) -> pd.DataFrame:
-    """Pull monthly returns for the linked PERMNOs."""
+    """Pull monthly returns + market-equity inputs for the linked PERMNOs.
+
+    Selects total return (`ret`), ex-dividend return (`retx`), price (`prc`)
+    and shares outstanding (`shrout`) so downstream code can build both
+    return series and market-equity (me = |prc| * shrout, in $000s).
+    """
     CHUNK = 2000
     frames = []
     print(f"\nFetching crsp.msf for {len(permnos):,} PERMNOs, "
@@ -162,7 +167,7 @@ def get_monthly_returns(db, permnos: list[int],
         batch = permnos[i:i + CHUNK]
         in_clause = ",".join(str(p) for p in batch)
         q = f"""
-            SELECT permno, date, ret
+            SELECT permno, date, ret, retx, prc, shrout
             FROM crsp.msf
             WHERE permno IN ({in_clause})
               AND date BETWEEN '{start_date}' AND '{end_date}'
@@ -172,7 +177,9 @@ def get_monthly_returns(db, permnos: list[int],
         frames.append(chunk)
         print(f"  batch {i // CHUNK + 1}: {len(chunk):,} monthly rows")
     df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    df = df.dropna(subset=["ret"])
+    # NB: do NOT drop ret-NaN here — the monthly panel keeps every month (price
+    # / market-equity can be present even when ret is missing). The annual
+    # compounding path drops ret-NaN itself.
     print(f"  total {len(df):,} monthly observations")
     return df
 
@@ -206,6 +213,61 @@ def get_fyear_ends(db, gvkeys: list[str],
 # Aggregation
 # =========================
 
+def attach_gvkey(monthly: pd.DataFrame, links: pd.DataFrame) -> pd.DataFrame:
+    """Window-filter monthly PERMNO rows onto GVKEY via the CCM link table,
+    then collapse to **one row per (gvkey, month)**.
+
+    A GVKEY can map to several PERMNOs over time (and dual share classes can
+    overlap in a month); we keep the primary link (`linkprim='P'`) over a
+    secondary (`'C'`) when a (gvkey, month) cell has more than one candidate.
+    """
+    links = links.copy()
+    links["linkdt"]    = pd.to_datetime(links["linkdt"], errors="coerce")
+    links["linkenddt"] = pd.to_datetime(links["linkenddt"], errors="coerce")
+    # Some link rows have NaT linkenddt meaning still active — set to far future
+    links["linkenddt"] = links["linkenddt"].fillna(pd.Timestamp("2099-12-31"))
+
+    m = monthly.merge(
+        links[["permno", "gvkey", "linkdt", "linkenddt", "linkprim"]],
+        on="permno", how="inner",
+    )
+    m = m[(m["date"] >= m["linkdt"]) & (m["date"] <= m["linkenddt"])].copy()
+
+    # Prefer primary links (P) over secondary (C); tie-break on permno for
+    # determinism. Then keep one row per (gvkey, month).
+    m["_linkprim_rank"] = (m["linkprim"] != "P").astype(int)
+    m = m.sort_values(["gvkey", "date", "_linkprim_rank", "permno"])
+
+    dup_cells = m.loc[m.duplicated(subset=["gvkey", "date"], keep=False),
+                      ["gvkey", "date"]].drop_duplicates()
+    if len(dup_cells):
+        print(f"  [dedupe] {len(dup_cells):,} (gvkey,month) cells had >1 linked "
+              f"permno — kept linkprim='P'")
+
+    m = m.drop_duplicates(subset=["gvkey", "date"], keep="first")
+    m = m.drop(columns=["_linkprim_rank", "linkdt", "linkenddt"])
+    return m
+
+
+def build_monthly_panel(monthly: pd.DataFrame, links: pd.DataFrame) -> pd.DataFrame:
+    """One row per (gvkey, permno, month): returns + market-equity.
+
+    Calendar months — no fiscal-year mapping here (that is a downstream step).
+    """
+    m = attach_gvkey(monthly, links)
+    m["year"]  = m["date"].dt.year
+    m["month"] = m["date"].dt.month
+    m["me"]    = m["prc"].abs() * m["shrout"]   # market cap, $000s
+    cols = ["gvkey", "permno", "date", "year", "month",
+            "ret", "retx", "prc", "shrout", "me"]
+    out = (m[cols]
+           .sort_values(["gvkey", "date"])
+           .reset_index(drop=True))
+    assert not out.duplicated(subset=["gvkey", "date"]).any(), \
+        "monthly panel has >1 row per (gvkey, month) after dedupe"
+    return out
+
+
 def annual_returns_from_monthly(monthly: pd.DataFrame,
                                 links: pd.DataFrame,
                                 fyear_ends: pd.DataFrame) -> pd.DataFrame:
@@ -213,43 +275,34 @@ def annual_returns_from_monthly(monthly: pd.DataFrame,
     Build firm-year buy-and-hold returns: compound the 12 monthly returns
     ending at the fiscal-year-end month.
     """
-    # Pick a single primary link per (permno, date) by taking the row whose
-    # validity window covers the date. Use a vectorized join.
-    links = links.copy()
-    links["linkdt"]    = pd.to_datetime(links["linkdt"], errors="coerce")
-    links["linkenddt"] = pd.to_datetime(links["linkenddt"], errors="coerce")
-    # Some link rows have NaT linkenddt meaning still active — set to far future
-    links["linkenddt"] = links["linkenddt"].fillna(pd.Timestamp("2099-12-31"))
-
-    # Merge monthly returns to get gvkey
-    monthly = monthly.merge(
-        links[["permno", "gvkey", "linkdt", "linkenddt"]],
-        on="permno", how="inner"
-    )
-    monthly = monthly[(monthly["date"] >= monthly["linkdt"]) &
-                      (monthly["date"] <= monthly["linkenddt"])].copy()
+    m = attach_gvkey(monthly, links)
+    m = m.dropna(subset=["ret"])   # compounding needs non-null returns
 
     # For each (gvkey, fyear) we need the 12 months ending at datadate
     fyear_ends = fyear_ends.rename(columns={"datadate": "fyear_end"})
     fyear_ends["fyear_end_period"] = fyear_ends["fyear_end"].dt.to_period("M")
-    monthly["month_period"] = monthly["date"].dt.to_period("M")
+    m["month_period"] = m["date"].dt.to_period("M")
 
     rows = []
-    # Build a (gvkey, month_period) → ret lookup
-    mret_by_gvkey = monthly.groupby("gvkey")
-    for gvkey, sub in mret_by_gvkey:
-        sub = sub.set_index("month_period")["ret"].sort_index()
+    for gvkey, sub in m.groupby("gvkey"):
+        sub = sub.sort_values("month_period").set_index("month_period")
+        ret_series    = sub["ret"]
+        permno_series = sub["permno"]
         firm_fy = fyear_ends[fyear_ends["gvkey"] == gvkey]
         for _, fy in firm_fy.iterrows():
             end_p = fy["fyear_end_period"]
             start_p = end_p - 11  # 12 months inclusive
-            window = sub.loc[start_p:end_p]
+            window = ret_series.loc[start_p:end_p]
             if len(window) >= 6:  # need at least half a year
                 stock_return = float((1 + window).prod() - 1)
                 clr = float(np.log1p(window).sum())
+                # Real PERMNO for this firm-year window (last month's permno),
+                # NOT the Series name — this is the historical `permno="ret"` bug.
+                pwin = permno_series.loc[start_p:end_p]
+                permno_val = int(pwin.iloc[-1]) if len(pwin) else None
                 rows.append({
                     "gvkey": gvkey,
-                    "permno": sub.name if hasattr(sub, "name") else None,
+                    "permno": permno_val,
                     "fyear": int(fy["fyear"]),
                     "fyear_end_date": fy["fyear_end"],
                     "n_months": int(len(window)),
@@ -275,6 +328,24 @@ def print_stats(df: pd.DataFrame):
     print(f"  Median months/window: {df['n_months'].median():.0f}")
 
 
+def print_monthly_stats(df: pd.DataFrame):
+    print("\n" + "=" * 60)
+    print("SUMMARY (monthly panel)")
+    print("=" * 60)
+    print(f"  Rows:              {len(df):,}")
+    print(f"  Unique GVKEYs:     {df['gvkey'].nunique():,}")
+    print(f"  Unique PERMNOs:    {df['permno'].nunique():,}")
+    if len(df):
+        print(f"  Date range:        {df['date'].min():%Y-%m} – {df['date'].max():%Y-%m}")
+    if df["ret"].notna().any():
+        r = df["ret"].dropna()
+        print(f"  ret    mean={r.mean():.4f}  median={r.median():.4f}  "
+              f"p10={r.quantile(0.1):.4f}  p90={r.quantile(0.9):.4f}")
+    print(f"  ret nulls:         {df['ret'].isna().sum():,} "
+          f"({df['ret'].isna().mean():.1%})")
+    print(f"  me  non-null:      {df['me'].notna().sum():,}")
+
+
 # =========================
 # Main
 # =========================
@@ -286,6 +357,10 @@ def main():
     )
     parser.add_argument("--explore", action="store_true",
                         help="Inspect WRDS schemas and exit")
+    parser.add_argument("--frequency", choices=["annual", "monthly"],
+                        default="annual",
+                        help="annual (compounded buy-and-hold, default) or "
+                             "monthly (calendar-month panel + market-equity)")
     parser.add_argument("--start-year", type=int, default=START_YEAR)
     parser.add_argument("--end-year", type=int, default=END_YEAR)
     parser.add_argument("--output", type=str, default=str(DEFAULT_OUTPUT))
@@ -297,7 +372,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("CRSP Annual Returns Builder")
+    print(f"CRSP Returns Builder ({args.frequency})")
     print("=" * 60)
     print(f"  Years:  {args.start_year}–{args.end_year}")
     print(f"  Output: {args.output}")
@@ -326,20 +401,29 @@ def main():
 
         permnos = sorted(set(int(p) for p in links["permno"].dropna().tolist()))
         monthly = get_monthly_returns(db, permnos, args.start_year, args.end_year)
-        fyear_ends = get_fyear_ends(db, gvkeys, args.start_year, args.end_year)
-
-        df = annual_returns_from_monthly(monthly, links, fyear_ends)
-        if df.empty:
-            print("[error] No annual returns built.")
-            return
-
-        if args.stats:
-            print_stats(df)
 
         output_dir = Path(args.output)
         output_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = output_dir / f"crsp_annual_returns_{ts}.csv"
+
+        if args.frequency == "monthly":
+            df = build_monthly_panel(monthly, links)
+            if df.empty:
+                print("[error] No monthly panel built.")
+                return
+            if args.stats:
+                print_monthly_stats(df)
+            out_path = output_dir / f"crsp_monthly_returns_{ts}.csv"
+        else:
+            fyear_ends = get_fyear_ends(db, gvkeys, args.start_year, args.end_year)
+            df = annual_returns_from_monthly(monthly, links, fyear_ends)
+            if df.empty:
+                print("[error] No annual returns built.")
+                return
+            if args.stats:
+                print_stats(df)
+            out_path = output_dir / f"crsp_annual_returns_{ts}.csv"
+
         df.to_csv(out_path, index=False)
         print(f"\n[write] {out_path}  ({len(df):,} rows)")
 
