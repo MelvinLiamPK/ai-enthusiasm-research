@@ -27,22 +27,22 @@ pulls, commits, or flips — you draft instructions; the owner/exec chats run th
 | Chat 5a · data aliases | ✅ `data/revelio/company_aliases.csv` (18,130 rows) |
 | Monthly-CRSP pull | ✅ done + **committed** (`c4345bb`); release `2026-06-07_crsp_monthly` |
 
-**Canonical flip target = `releases/2026-06-07_crsp_monthly`** — a complete, flippable
-19-file snapshot that symlink-inherits `2026-06-05_def14a` (→ `2026-05-27`) and adds the
-CRSP monthly panel + fixed-permno annual. Flipping it activates def14a enrichment **and**
-CRSP monthly in one move (subsumes the old "flip to def14a?" question). Reproducible.
+**Canonical `current` → `releases/2026-06-07_crsp_monthly` (FLIPPED 2026-06-12, commit `ec5d9f3`).**
+The active release is now the complete 19-file snapshot inheriting `2026-06-05_def14a`
+(→ `2026-05-27`) + the CRSP monthly panel + fixed-permno annual — so **def14a enrichment AND
+CRSP monthly are live** for all analysis reading `current/`. Reversible (re-point the symlink).
 
 ---
 
 ## THE FULL WORKPLAN
 
-### Owner queue (non-chat actions, do soon)
-1. **Flip `current` → `2026-06-07_crsp_monthly`** — on Chat 3's critical path (Chat 3 reads
-   `current/` for def14a age/board-comp + monthly CRSP). Owner reviews diffs, then flips.
-2. **Commit the planning docs** — `PIPELINE_STATE.md`, `chat6_apify_backlog_spec`,
-   `chat3_length_intensity_addendum`, this handoff, and the `master_sequencing`/`CLAUDE.md`
-   edits are all **uncommitted** (only the CRSP handoffs went in with `c4345bb`).
-3. **Send the progress email** (drafted in the prior chat; not saved — re-draft if needed).
+### Owner queue (non-chat actions)
+1. ✅ **DONE — flipped `current` → `2026-06-07_crsp_monthly`** (`ec5d9f3`). def14a + CRSP live.
+2. ✅ **DONE — planning docs committed** (`2c9f498`). NOTE: `CLAUDE.md` is **gitignored** in
+   this repo, so its edits (PIPELINE_STATE pointer + gotchas) are **local-only, not in git** —
+   re-apply on any fresh clone; PIPELINE_STATE.md (committed) carries the same facts.
+3. ◻ **Send the progress email** — saved at `docs/comms/progress_email_20260612.md` (committed),
+   **not yet sent** (no mail tool). Copy into a mail client to send.
 
 ### Wave 2 — current focus (chats parallel; launch now)
 - **Chat 6 · Apify BACKLOG scrape** — spec `chat6_apify_backlog_spec_20260606.md`. **REFRAMED:**
@@ -55,8 +55,8 @@ CRSP monthly in one move (subsumes the old "flip to def14a?" question). Reproduc
 - **Chat 3 · Full analysis v1** — spec `analysis_expansion_plan_20260530.md` §4/§5/§6
   **+ `chat3_length_intensity_addendum_20260606.md`** (John's post-length/intensity signal —
   our sentiment is a per-word *density*, so length is orthogonal; test it 3 ways).
-  **Depends on the flip** (def14a age/board-comp + monthly CRSP). Build the §4 panel WITHOUT
-  tenure-gating (deferred to Wave 4).
+  **Flip is now DONE (2026-06-12) → Chat 3 is unblocked, ready to launch.** Build the §4 panel
+  WITHOUT tenure-gating (deferred to Wave 4).
 - **Chat 5b/c · LLM aliases + apply** — **needs a spec** (currently split across
   `pre_meeting_plan §4` + meeting notes). 5b = LLM brand/subsidiary layer (Alphabet→YouTube/
   Waymo); 5c = apply union → recompute Revelio `strong_match` (lenient/non-date-gated) →
