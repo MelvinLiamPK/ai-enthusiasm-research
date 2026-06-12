@@ -77,14 +77,21 @@ launch those old Chat A/B/C separately — they're folded in below.
   regardless of date).
 - **Depends on:** nothing. **Its step (a) is the prerequisite for Chat 6.**
 
-### Chat 6 — Apify expansion (long-pole; now a Wave-2 priority)
-- **Spec:** TO BE WRITTEN when this wave starts (not yet spec'd).
-- **Does:** URL discovery for the ~5,647 new def14a directors + ~987 unscraped
-  new-nominees (using Chat 5a's name-change list to avoid name-change misses) →
-  Apify scraping → re-score → NEW canonical release. Checkpoint + report cost; the
-  owner tops up credits as it runs (no pilot, no hard cap).
-- **Depends on:** Chat 5 step (a). **This is the gate for the tenure union** — once
-  these directors have posts, Wave 4 builds the WRDS∪def14a tenure panel + gating.
+### Chat 6 — Apify backlog scrape (long-pole; now a Wave-2 priority)
+- **Spec:** [`chat6_apify_backlog_spec_20260606.md`](chat6_apify_backlog_spec_20260606.md). **REFRAMED 2026-06-06 — read it + `docs/PIPELINE_STATE.md`.**
+- **CORRECTION:** the old framing below ("URL discovery for ~5,647 new directors →
+  Apify") was **wrong**. Per `PIPELINE_STATE.md`, **Serper discovery AND the Revelio
+  crosscheck are already DONE for everyone** (def14a via the May-16 primary-anchor
+  rescrape); the new def14a directors are essentially scraped already. What remains is a
+  **post-scrape backlog** of validated strong-match URLs — an **Apify-only** job.
+- **Does:** (Task 0) build the person-level **coverage ledger** → certify Serper/Revelio
+  coverage + resolve the true backlog from the Sherlock Apify submission logs (the 9,551
+  strong-match-without-posts is an UPPER bound; unknown how many were ever submitted);
+  (Task 1) Apify-scrape the **never-submitted** strong matches (+ a ~200-URL recoverability
+  probe on the submitted-empty set); (Task 2) **LM-only** re-score → NEW canonical release.
+  Checkpoint + cost report; no pilot/no cap; owner tops up credits. Runs on Sherlock.
+- **Depends on:** nothing hard (NOT 5a — no discovery happens here). Still **the gate for
+  the tenure union** — once the backlog is scored, Wave 4 builds WRDS∪def14a tenure + gating.
 
 ---
 
@@ -93,12 +100,13 @@ launch those old Chat A/B/C separately — they're folded in below.
 | Wave | Chats (parallel within a wave) | Gate |
 |---|---|---|
 | **1** | Chat 1 (def14a merge) · Chat 2 (parity + headline refresh) · Chat 4 (RA release) · Chat 5a (data aliases) · **Monthly-CRSP pull** | none |
-| **2** | **Chat 6 (Apify expansion)** · Chat 3 (full analysis v1) · Chat 5b/c (LLM alias + apply) | Chat 6←5a; Chat 3←Chat 1 + CRSP pull |
+| **2** | **Chat 6 (Apify backlog scrape — reframed)** · Chat 3 (full analysis v1) · Chat 5b/c (LLM alias + apply) | Chat 6← none (Apify-only; 5a no longer required); Chat 3←Chat 1 + CRSP pull |
 | **4** | **Build the tenure union (WRDS∪def14a) + tenure-gating**, then re-run Chats 2+3 pipeline on the post-expansion corpus (v2 final) + new-nominee instrument | ←Chat 6 + re-score |
 
-Wave 1 is fully parallel — all start immediately. Chat 6 (the long-pole) kicks off
-as soon as 5a lands and runs in the background while Chat 3 does v1 on the current
-corpus. **Tenure work all lands in Wave 4** (after the def14a directors have posts).
+Wave 1 is fully parallel — all start immediately. Chat 6 (the long-pole) can kick off
+**immediately** (no 5a dependency — it's Apify-only on already-validated strong matches)
+and runs in the background while Chat 3 does v1 on the current corpus. **Tenure work all
+lands in Wave 4** (after the backlog scrape is scored).
 
 **Monthly-CRSP pull (Wave 1 task):** extend `build_crsp_returns.py` (or a sibling)
 to pull **monthly** CRSP returns from WRDS → `data/extracted/crsp/crsp_monthly_returns_*.csv`,
