@@ -41,8 +41,10 @@ CRSP monthly are live** for all analysis reading `current/`. Reversible (re-poin
 2. ✅ **DONE — planning docs committed** (`2c9f498`). NOTE: `CLAUDE.md` is **gitignored** in
    this repo, so its edits (PIPELINE_STATE pointer + gotchas) are **local-only, not in git** —
    re-apply on any fresh clone; PIPELINE_STATE.md (committed) carries the same facts.
-3. ◻ **Send the progress email** — saved at `docs/comms/progress_email_20260612.md` (committed),
-   **not yet sent** (no mail tool). Copy into a mail client to send.
+3. ◻ **Progress email — drafted, owner sends ~Monday.** Full text at
+   **`docs/comms/progress_email_20260612.md`** (committed). To Nick/John/Daron, re the missed
+   meeting. Owner will copy it into a mail client and send manually (~Mon); it is NOT auto-sent.
+   If you revise project status before then, update that file so the sent version is current.
 
 ### Wave 2 — current focus (chats parallel; launch now)
 - **Chat 6 · Apify BACKLOG scrape** — spec `chat6_apify_backlog_spec_20260606.md`. **REFRAMED:**
