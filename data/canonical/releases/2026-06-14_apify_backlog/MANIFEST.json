@@ -1,0 +1,51 @@
+{
+  "release": "2026-06-14_apify_backlog",
+  "build_date": "2026-06-14",
+  "git_sha": "bb60562996fdf10f743f0dbcfae96bc24e4503c8",
+  "current_symlink_flipped": false,
+  "base_release": "2026-06-07_crsp_monthly",
+  "built_by": "Chat 6 (Apify backlog re-scrape + LM re-score)",
+  "what_changed": "Folds the Apify strong-match-backlog recovery into the sentiment layer. The strong-match 'submitted-empty' bucket (9,551 URLs) was re-scraped and found to be ~10.8% RECOVERABLE (transient failures in the original Feb-Mar scrape, NOT genuine empties): 1,054 distinct profiles / 136,959 posts recovered (+6.7% profiles, +4.7% posts on the 15,670-profile / ~2.9M-post corpus). New posts were LM-scored (sentiment_analysis_full.py; FinBERT columns left NaN -- LM-only this round) and folded in. company_sentiment_annual/quarterly were RE-AGGREGATED on the expanded corpus and VERIFIED (see verification). posts_scored_unique and posts_full_coverage are the EXPANDED corpus (existing 2026-05-27 + the recovered posts, header-stripped append). All other files are symlink-inherited UNCHANGED from 2026-06-07_crsp_monthly. `current` NOT flipped.",
+  "verification": {
+    "reproduction_gate": "PASS -- aggregate_sentiment.py reproduces the existing company_sentiment_annual_20260527 byte-for-byte on all 54,466 company-years before any new data was added (src/data_analysis/verify_aggregation_repro.py).",
+    "unchanged_companies_cell_level": "PASS -- every (company_name_clean, gvkey, ticker, year/quarter) cell that received ZERO new posts is identical to the canonical panel within rtol/atol 1e-6: annual 50,687/50,687, quarterly 147,880/147,880, 0 drifted.",
+    "memory_safe_load": "full_coverage read with usecols (drops post_text); pandas tokenizes the full row before applying usecols, so on_bad_lines skipping is identical to a full read -- faithful."
+  },
+  "strong_match_definition": "company_sentiment uses the EXISTING panel's revelio source: data/revelio/revelio_validation_summary.csv (v1) `strong_match` (strict, single-tier) -- this is what reproduces the canonical panel exactly, so unchanged companies stay identical (guardrail). All 1,053 recovered URLs are present in v1; v1 strong_match=True for 979 of them. 52 recovered profiles are strong under v2 `strong_match_either` (Tier-2 headline) but not v1 strict; applying the Tier-2 lift panel-wide would change EXISTING companies' n_strong_match_posts (fails the unchanged-companies check) and is therefore deferred to a separate methodology-change release, not this one. NOTE: the firm panel's strong-subset (build_multifreq_panel) already uses `strong_match_either` -- that is unchanged here because the firm panel is inherited, not rebuilt (see firm_panel note).",
+  "firm_panel_note": "firm_panel_annual.dta and firm_panel_quarterly.dta are INHERITED UNCHANGED (do NOT reflect the new posts). A re-scored firm panel was attempted via build_multifreq_panel.py but REJECTED by the verification gate: that script is a SEPARATE unfiltered product (32,049 firm-years, revelio strong_match_either) and is NOT the canonical .dta's builder (the .dta has 19,858 filtered firm-years: n_posts>=1, 2013-2024, financials-joined); 52 unchanged firm-years drifted on n_posts/n_persons. Per the stop-and-report guardrail, no drifted panel was shipped. FOLLOW-UP (planning 2026-06-15; off Chat 6's plate -> dedicated unified-reconciliation chat): the BASE firm/person panels are built by build_stata_handoff.py (build_firm_panel/build_firm_quarterly + person_year/person_lifetime, from company_sentiment + posts_scored_unique) -- re-run THAT on the new company_sentiment, then re-apply def14a board-composition via build_def14a_merge_release.py (which only merges, does not aggregate sentiment) + the age join, with a reproduction gate. See docs/handoffs/unified_reconciliation_release_spec_20260615.md.",
+  "recovery_provenance": {
+    "scrape": "Apify apimaestro/linkedin-batch-profile-posts-scraper, SLURM on Sherlock; all 9,169 strong-match explicit-empty URLs re-scraped (+ 182 input-only + 2 truncated re-scraped @10000). Billing $0.005/post; episode ~$750.",
+    "coverage_ledger": "data/processed/coverage_ledger_20260613_*.csv (102,324 rows); Deliverables A+B in docs/handoffs/chat6_task0_coverage_report_20260613.md.",
+    "recovered_posts_source": "data/processed/backlog_newposts_20260613_183034.csv -> LM-scored outputs/sentiment_results/backlog_20260613_183034/sentiment_all_posts_20260614_221339.csv -> corpus additions backlog_scored_unique / backlog_full_coverage."
+  },
+  "files": {
+    "company_sentiment_annual.csv": {"rows": 56517, "status": "NEW (re-aggregated, verified)",
+      "source": "../../../../outputs/sentiment_results/company_sentiment_annual_backlog_20260614_225528.csv",
+      "note": "was 54,466; +2,051 new company-years from recovery; 7,118 companies touched."},
+    "company_sentiment_quarterly.csv": {"rows": 162528, "status": "NEW (re-aggregated, verified)",
+      "source": "../../../../outputs/sentiment_results/company_sentiment_quarterly_backlog_20260614_225528.csv"},
+    "posts_scored_unique.csv": {"status": "NEW (expanded corpus)", "added_posts": 136959,
+      "source": "../../../../outputs/sentiment_results/sentiment_posts_scored_unique_20260614.csv",
+      "note": "existing 2026-05-27 scored corpus + 136,959 recovered posts (LM-scored, FinBERT=NaN)."},
+    "posts_full_coverage.csv": {"rows": 3110810, "status": "NEW (expanded corpus)",
+      "source": "../../../../outputs/sentiment_results/sentiment_all_posts_full_coverage_20260614.csv",
+      "note": "was 2,922,365; +188,445 per-board rows from the recovery."},
+    "firm_panel_annual.dta": {"rows": 19858, "status": "INHERITED UNCHANGED (re-score deferred; see firm_panel_note)",
+      "source": "../2026-06-05_def14a/firm_panel_annual.dta"},
+    "firm_panel_quarterly.dta": {"status": "INHERITED UNCHANGED (see firm_panel_note)",
+      "source": "../../../../outputs/stata_handoff_20260527/data/firm_quarterly.dta"},
+    "revelio_validation_summary.csv": {"status": "inherited", "source": "../../../revelio/revelio_validation_summary_v2.csv"},
+    "crsp_annual_returns.csv": {"status": "inherited", "source": "../../../extracted/crsp/crsp_annual_returns_20260607_150439.csv"},
+    "crsp_monthly_returns.csv": {"status": "inherited", "source": "../../../extracted/crsp/crsp_monthly_returns_20260607_150204.csv"},
+    "funda_annual.csv": {"status": "inherited", "source": "../../../extracted/compustat/funda_20260425_135322.csv"},
+    "def14a_board_composition.csv": {"status": "inherited", "source": "../../../processed/def14a_board_composition_20260605.csv"},
+    "def14a_corpus_intersection.csv": {"status": "inherited", "source": "../../../processed/def14a_corpus_intersection_20260605.csv"},
+    "def14a_director_attributes.csv": {"status": "inherited", "source": "../../../processed/def14a_director_attributes_20260606.csv"},
+    "def14a_director_status.csv": {"status": "inherited", "source": "../../../processed/def14a_director_status_age_20260605.csv"},
+    "def14a_director_tenure.csv": {"status": "inherited", "source": "../../../processed/def14a_director_tenure_panel_20260528.csv"},
+    "def14a_new_nominee_tenure.csv": {"status": "inherited", "source": "../../../processed/def14a_new_nominee_tenure_20260605.csv"},
+    "person_lifetime.dta": {"status": "inherited", "source": "../2026-06-05_def14a/person_lifetime.dta"},
+    "person_year.dta": {"status": "inherited", "source": "../2026-06-05_def14a/person_year.dta"},
+    "CODEBOOK.md": {"status": "inherited (schemas unchanged; only row counts grew)", "source": "../2026-06-05_def14a/CODEBOOK.md"}
+  }
+}
